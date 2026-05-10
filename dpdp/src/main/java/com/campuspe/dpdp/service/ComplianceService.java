@@ -5,7 +5,10 @@ import org.springframework.scheduling.annotation.Async;
 import org.springframework.beans.factory.annotation.Autowired;
 
 import com.campuspe.dpdp.model.ComplianceRecord;
+import com.campuspe.dpdp.model.User;
 import com.campuspe.dpdp.repository.ComplianceRepository;
+
+import java.util.List;
 
 @Service
 public class ComplianceService {
@@ -16,11 +19,14 @@ public class ComplianceService {
     @Autowired
     private AiServiceClient aiServiceClient;
 
-    // The method the frontend calls immediately
-    public ComplianceRecord createRecord(String rawInput) {
+    /**
+     * Create a new compliance record, attaching the authenticated user.
+     */
+    public ComplianceRecord createRecord(String rawInput, User user) {
         ComplianceRecord record = new ComplianceRecord();
         record.setRawInput(rawInput);
         record.setStatus("PROCESSING");
+        record.setUser(user);
         
         // Save the raw record immediately
         ComplianceRecord savedRecord = repository.save(record);
@@ -51,9 +57,21 @@ public class ComplianceService {
             System.err.println("Failed to enrich record " + recordId);
         }
     }
-    public java.util.List<ComplianceRecord> getAllRecords() {
+
+    /**
+     * ADMIN: return all records.
+     */
+    public List<ComplianceRecord> getAllRecords() {
         return repository.findAll();
     }
+
+    /**
+     * USER: return only records belonging to this user.
+     */
+    public List<ComplianceRecord> getRecordsByUserId(Long userId) {
+        return repository.findByUserId(userId);
+    }
+
     // Fetch a single record by its ID
     public ComplianceRecord getRecordById(Long id) {
         return repository.findById(id).orElse(null);

@@ -1,4 +1,3 @@
-import redis
 import hashlib
 import threading
 import time
@@ -10,8 +9,15 @@ app = Flask(__name__)
 # Track start time for health endpoint
 start_time = time.time()
 
-# Initialize Redis (Standard port 6379)
-cache = redis.Redis(host='localhost', port=6379, decode_responses=True)
+# Initialize Redis (optional — graceful fallback if not available)
+try:
+    import redis
+    cache = redis.Redis(host='localhost', port=6379, decode_responses=True)
+    cache.ping()  # Test the connection
+    print("[OK] Redis connected")
+except Exception:
+    cache = None
+    print("[WARN] Redis not available - running without cache")
 
 # Import and register blueprints
 from routes.describe import describe_bp

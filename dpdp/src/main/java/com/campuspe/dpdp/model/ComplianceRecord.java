@@ -1,10 +1,7 @@
 package com.campuspe.dpdp.model;
 
-import jakarta.persistence.Entity;
-import jakarta.persistence.GeneratedValue;
-import jakarta.persistence.GenerationType;
-import jakarta.persistence.Id;
-import jakarta.persistence.Lob;
+import jakarta.persistence.*;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 
 @Entity
 public class ComplianceRecord {
@@ -21,7 +18,16 @@ public class ComplianceRecord {
     
     private String status;
 
-    // Getters and Setters
+    /**
+     * The user who created this compliance record.
+     * Nullable for backward-compatibility with seeded/legacy data.
+     */
+    @ManyToOne(fetch = FetchType.EAGER)
+    @JoinColumn(name = "user_id")
+    @JsonIgnoreProperties({"password"})
+    private User user;
+
+    // ── Getters and Setters ───────────────────────────────
     public Long getId() { return id; }
     public void setId(Long id) { this.id = id; }
     
@@ -33,4 +39,15 @@ public class ComplianceRecord {
     
     public String getStatus() { return status; }
     public void setStatus(String status) { this.status = status; }
+
+    public User getUser() { return user; }
+    public void setUser(User user) { this.user = user; }
+
+    /**
+     * Convenience getter for the username of the record creator.
+     * Returns null if no user is attached (legacy records).
+     */
+    public String getSubmittedBy() {
+        return user != null ? user.getUsername() : null;
+    }
 }

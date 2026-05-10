@@ -1,6 +1,8 @@
 package com.campuspe.dpdp.service;
 
 import com.campuspe.dpdp.model.ComplianceRecord;
+import com.campuspe.dpdp.model.Role;
+import com.campuspe.dpdp.model.User;
 import com.campuspe.dpdp.repository.ComplianceRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -33,11 +35,13 @@ class ComplianceServiceTest {
 
     @Test
     void createRecord_Success() {
+        User testUser = new User("testuser", "hashed", Role.USER);
         ComplianceRecord record = new ComplianceRecord();
         record.setRawInput("Test data leak");
+        record.setUser(testUser);
         when(repository.save(any())).thenReturn(record);
 
-        ComplianceRecord saved = service.createRecord("Test data leak");
+        ComplianceRecord saved = service.createRecord("Test data leak", testUser);
         assertNotNull(saved);
     }
 
