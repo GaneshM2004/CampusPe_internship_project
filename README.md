@@ -172,12 +172,3 @@ frontend/
 - Dockerized microservice deployment
 
 ---
-
-## 10. Developed By
-
-**Team 7 – Capstone Internship Project**
-
-- **Sprint Duration:** 14 April 2026 – 9 May 2026
-- **Demo Day:** Friday, 9 May 2026
-
----
