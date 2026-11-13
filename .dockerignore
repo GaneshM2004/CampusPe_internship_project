@@ -1,0 +1,12 @@
+.git
+.gitignore
+.env
+*.log
+groq.log
+__pycache__
+*.pyc
+.pytest_cache
+node_modules
+dist
+target
+data/*.db

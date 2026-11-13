@@ -50,7 +50,7 @@ public class JwtUtils {
      * Extract userId claim.
      */
     public Long getUserId(String token) {
-        return parseClaims(token).get("userId", Long.class);
+        return parseClaims(token).get("userId", Number.class).longValue();
     }
 
     /**

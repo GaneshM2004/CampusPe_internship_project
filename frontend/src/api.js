@@ -1,6 +1,9 @@
 import axios from 'axios';
 
-const API_BASE = 'http://localhost:8080';
+// API_BASE is configurable via VITE_API_URL env var.
+// Set it in .env for local dev, or in Docker Compose build args for production.
+// Default: http://localhost:8080 (local Spring Boot backend)
+const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8080';
 
 const api = axios.create({
   baseURL: API_BASE,
@@ -32,4 +35,5 @@ api.interceptors.response.use(
   }
 );
 
+export { API_BASE };
 export default api;

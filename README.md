@@ -1,134 +1,205 @@
-# DPDP Act Compliance Centre
+# Tool-15: DPDP Act Compliance Centre
 
-An AI-powered compliance platform built during my internship at **CampusPe**, designed to help organizations navigate India's **Digital Personal Data Protection (DPDP) Act, 2023**, the Indian equivalent of GDPR.
+## 1. Project Overview
 
-The platform automates data protection auditing, generates compliance recommendations, and produces executive-level audit reports using a RAG-based AI pipeline backed by Groq's Llama-3.3-70b model.
+The **DPDP Act Compliance Centre** is an AI-powered MVP designed to assist organizations in navigating the India **Digital Personal Data Protection (DPDP) Act**.
 
----
-
-## What Problem It Solves
-
-India's DPDP Act places strict obligations on organizations that handle personal data. Compliance is complex, legal-heavy, and expensive to audit manually. This platform lets organizations upload or describe their data handling practices, get instant AI-generated compliance gap analysis, receive actionable recommendations mapped to DPDP Act provisions, and download structured audit reports ready for DPO (Data Protection Officer) review.
+This real-world application uses an industry-standard tech stack to provide automated data protection auditing, compliance recommendations, and AI-generated reports.
 
 ---
 
-## Architecture
+## 2. System Architecture
 
-A 3-tier microservice architecture with a dedicated AI service, separating concerns cleanly across frontend, backend, and ML layers.
+This project follows a **3-tier microservice architecture** to ensure scalability and separation of concerns.
 
-```
-[ React 18 + Vite Frontend ]
-          |
-          v
-[ Spring Boot 3.x Backend ] <---> [ PostgreSQL 15 ]
-          |                              |
-          v                              +--> [ Redis 7 Cache ]
-[ Flask AI Microservice ]
-          |
-          +---> [ Groq Cloud API — Llama-3.3-70b ]
-          +---> [ ChromaDB Vector Store (RAG) ]
+```text
+      [ React 18 + Vite Frontend ]
+                | (Port 80)
+                v
+      [ Spring Boot 3.x Backend ] <---> [ PostgreSQL 15 ]
+                | (Port 8080)              |
+                v                          +--> [ Redis 7 Cache ]
+      [ Flask 3.x AI Microservice ]
+                | (Port 5000)
+                +---> [ Groq Cloud API (Llama-3.3-70b) ]
+                +---> [ ChromaDB Vector Store ]
 ```
 
-All services are containerized and orchestrated via Docker Compose.
+### Request Flow
+
+1. **User Action (React UI)**: User logs in (JWT issued), submits a raw data processing description.
+2. **Spring Boot Controller**: Validates the JWT, attaches the authenticated `User`, saves a `ComplianceRecord` with status `PROCESSING`.
+3. **Async Enrichment**: Spring delegates via `AsyncEnricher` (a separate bean to avoid proxy self-invocation bypass) to call `AiServiceClient`.
+4. **Flask Microservice**: Receives the request at `/describe`, formats the prompt, calls the Groq Cloud API via `GroqClient` with exponential backoff retries, and returns structured JSON.
+5. **Database Update**: The backend updates the record with the professional description and sets status to `COMPLETED`.
+6. **Frontend Polling**: The React dashboard polls `/api/records` every 3 seconds, picks up the completed record, and updates the compliance analytics charts.
+7. **Recommendations & Reports**: On-demand user actions trigger `/api/records/{id}/recommendations` and `/api/records/{id}/report`, with ownership enforced by the backend before calling the AI microservice.
 
 ---
 
-## Features
+## 3. Tech Stack
 
-- AI compliance auditing with automated gap analysis against DPDP Act provisions
-- RAG pipeline using ChromaDB and sentence-transformers for context-aware responses
-- Full audit report generation with executive summaries and findings
-- Compliance categorization that auto-classifies inputs into DPDP categories
-- DPO summary generator that converts raw compliance data into professional summaries
-- Real-time analytics dashboard built with Recharts
-- JWT authentication with Spring Security
-- Swagger API documentation
+### Backend
+- Java 17
+- Spring Boot 3.x
+- Spring Security + JWT
+- Flyway
+- PostgreSQL 15
+- Redis 7
+
+### AI Service
+- Python 3.11
+- Flask 3.x
+- Groq API (Llama-3.3-70b)
+- ChromaDB
+- sentence-transformers
+
+### Frontend
+- React 18+
+- Vite
+- Tailwind CSS
+- Axios
+- Recharts
+
+### Infrastructure
+- Docker
+- Docker Compose
 
 ---
 
-## Tech Stack
+## 4. Environment Variables
 
-| Layer | Technologies |
-|---|---|
-| Frontend | React 18, Vite, Tailwind CSS, Axios, Recharts |
-| Backend | Java 17, Spring Boot 3.x, Spring Security, JWT, Flyway |
-| Database | PostgreSQL 15, Redis 7 |
-| AI Service | Python 3.11, Flask 3.x, Groq API (Llama-3.3-70b) |
-| AI / ML | ChromaDB, sentence-transformers, RAG pipeline |
-| Infrastructure | Docker, Docker Compose |
+Create a `.env` file in the project root directory.
+
+### Required Variables
+
+| Variable | Description | Example |
+|----------|-------------|----------|
+| `GROQ_API_KEY` | API key from Groq Cloud | `gsk_xxxx...` |
+| `DB_PASSWORD` | PostgreSQL password | `postgres` |
+| `JWT_SECRET` | Secret key for JWT token signing | `your_secret_key` |
+| `VITE_API_URL` | Frontend URL for backend access | `http://localhost:8080` |
 
 ---
 
-## Getting Started
+## 5. Setup & Installation
 
-### Prerequisites
-- Docker and Docker Compose
-- A free [Groq API key](https://console.groq.com)
-
-### 1. Clone the repo
+### 1. Clone the Repository
 
 ```bash
-git clone https://github.com/GaneshM2004/CampusPe_internship_project.git
-cd CampusPe_internship_project
+git clone [repository-url]
+cd your-project-folder
 ```
 
-### 2. Set up environment variables
+### 2. Configure Environment
 
-Create a `.env` file in the root directory:
+Create a `.env` file in the root directory and add your credentials:
 
 ```env
 GROQ_API_KEY=gsk_xxxx...
 DB_PASSWORD=postgres
-JWT_SECRET=your_secret_key_here
+JWT_SECRET=your_secret_key
 VITE_API_URL=http://localhost:8080
 ```
 
-### 3. Start all services
+### 3. Start Services
+
+Build and start all containers using Docker Compose:
 
 ```bash
-docker-compose up --build
+# 1. Ensure .env exists with your GROQ_API_KEY
+cp .env.example .env
+# Edit .env with your real GROQ_API_KEY
+
+# 2. Build and start containers
+docker compose up --build
+
+# 3. In a separate terminal, start the frontend
+cd frontend
+npm install
+npm run dev
 ```
 
-### 4. Access the app
+> **Frontend in Docker**: The React frontend is currently run locally via Vite (`npm run dev`). A containerized frontend service is planned for future work.
+
+---
+
+## 6. Access the Application
 
 | Service | URL |
-|---|---|
-| Frontend | http://localhost |
-| Swagger API Docs | http://localhost:8080/swagger-ui.html |
-| AI Service Health | http://localhost:5000/health |
+|---------|-----|
+| Frontend | `http://localhost` |
+| Swagger API Docs | `http://localhost:8080/swagger-ui.html` |
+| AI Health Check | `http://localhost:5000/health` |
 
 ---
 
-## AI Service API Reference
+## 7. API Reference (AI Microservice)
 
-| Endpoint | Method | Description |
-|---|---|---|
-| `/describe` | POST | Generates professional DPO summaries from raw input |
-| `/recommend` | POST | Returns 3 actionable compliance recommendations as JSON |
-| `/generate-report` | POST | Produces a full audit report with executive summary and findings |
-| `/categorise` | POST | Classifies input into DPDP compliance categories |
-| `/health` | GET | Returns model uptime, model name, and ChromaDB stats |
+### `POST /describe`
+Generates professional DPO summaries based on raw input.
+
+### `POST /recommend`
+Returns 3 actionable compliance recommendations as a JSON array.
+
+### `POST /generate-report`
+Produces a full audit report including executive summaries and findings.
+
+### `POST /categorise`
+Classifies inputs into predefined compliance categories.
+
+### `GET /health`
+Returns:
+- Model uptime
+- Model name
+- ChromaDB statistics
 
 ---
 
-## Project Structure
+## 8. Folder Structure
 
+```text
+backend/
+ ├── controllers/
+ ├── services/
+ ├── migrations/
+ └── ...
+
+ai-service/
+ ├── routes/
+ ├── groq-client/
+ ├── chromadb-services/
+ ├── rag-prompts/
+ └── ...
+
+frontend/
+ ├── components/
+ ├── pages/
+ ├── analytics/
+ ├── dashboard/
+ └── ...
 ```
-frontend/           React 18 + Vite app (dashboard, analytics, forms)
-dpdp/               Spring Boot backend (auth, APIs, DB migrations)
-ai-service/         Flask AI microservice (Groq, ChromaDB, RAG)
-docker-compose.yml  Orchestrates all services
-.env                Environment config (not committed)
-```
 
 ---
 
-## Security
+## 9. Features
 
-JWT-based stateless authentication is handled via Spring Security. Passwords are hashed and secrets are managed through environment variables. See [SECURITY.md](./SECURITY.md) for the responsible disclosure policy.
+- AI-powered compliance auditing
+- Automated DPDP Act recommendations
+- Executive audit report generation
+- Compliance categorization system
+- JWT-based authentication
+- Vector search with ChromaDB
+- Real-time analytics dashboard
+- Dockerized microservice deployment
 
 ---
 
-## Built At
+## 10. Developed By
 
-This was built as part of my internship at **CampusPe** as a production-grade MVP demonstrating AI-assisted legal compliance tooling for the Indian market.
+**Team 7 – Capstone Internship Project**
+
+- **Sprint Duration:** 14 April 2026 – 9 May 2026
+- **Demo Day:** Friday, 9 May 2026
+
+---

@@ -1,7 +1,6 @@
 package com.campuspe.dpdp.service;
 
 import org.springframework.stereotype.Service;
-import org.springframework.scheduling.annotation.Async;
 import org.springframework.beans.factory.annotation.Autowired;
 
 import com.campuspe.dpdp.model.ComplianceRecord;
@@ -20,42 +19,30 @@ public class ComplianceService {
     private AiServiceClient aiServiceClient;
 
     /**
+     * AsyncEnricher is a separate bean so that the @Async proxy is NOT bypassed.
+     * See AsyncEnricher.java for the explanation of the self-invocation problem.
+     */
+    @Autowired
+    private AsyncEnricher asyncEnricher;
+
+    /**
      * Create a new compliance record, attaching the authenticated user.
+     * The record is immediately saved with status=PROCESSING.
+     * AI enrichment runs asynchronously via AsyncEnricher.
      */
     public ComplianceRecord createRecord(String rawInput, User user) {
         ComplianceRecord record = new ComplianceRecord();
         record.setRawInput(rawInput);
         record.setStatus("PROCESSING");
         record.setUser(user);
-        
-        // Save the raw record immediately
-        ComplianceRecord savedRecord = repository.save(record);
-        
-        // Fire off the AI task in the background (Day 7 Task!)
-        enrichRecordWithAi(savedRecord.getId(), rawInput);
-        
-        return savedRecord;
-    }
 
-    // Day 7 @Async Task
-    @Async
-    public void enrichRecordWithAi(Long recordId, String rawInput) {
-        try {
-            // 1. Call your Flask Python server
-            String cleanDescription = aiServiceClient.getProfessionalDescription(rawInput);
-            
-            // 2. Fetch the record from DB
-            ComplianceRecord record = repository.findById(recordId).orElse(null);
-            
-            if (record != null) {
-                // 3. Attach AI result and update status (handle nulls gracefully)
-                record.setProfessionalDescription(cleanDescription);
-                record.setStatus("COMPLETED");
-                repository.save(record);
-            }
-        } catch (Exception e) {
-            System.err.println("Failed to enrich record " + recordId);
-        }
+        // Save the raw record immediately so the UI can show it
+        ComplianceRecord savedRecord = repository.save(record);
+
+        // Fire the AI enrichment in a background thread (through Spring proxy)
+        asyncEnricher.enrichRecordWithAi(savedRecord.getId(), rawInput);
+
+        return savedRecord;
     }
 
     /**
@@ -72,9 +59,10 @@ public class ComplianceService {
         return repository.findByUserId(userId);
     }
 
-    // Fetch a single record by its ID
+    /**
+     * Fetch a single record by its ID.
+     */
     public ComplianceRecord getRecordById(Long id) {
         return repository.findById(id).orElse(null);
     }
-
 }

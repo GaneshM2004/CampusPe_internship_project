@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import api from '../api';
+import api, { API_BASE } from '../api';
 import { useAuth } from '../AuthContext';
 import {
   ShieldAlert, Database, ListChecks, FileText, X, Activity,
@@ -279,7 +279,7 @@ export default function Dashboard() {
                 onClick={() => {
                   // We need to send the token for the authenticated request
                   const token = localStorage.getItem('token');
-                  fetch('http://localhost:8080/api/records/export', {
+                  fetch(`${API_BASE}/api/records/export`, {
                     headers: { 'Authorization': `Bearer ${token}` }
                   })
                     .then(res => res.blob())
@@ -349,6 +349,9 @@ export default function Dashboard() {
                         <div className="mt-0.5"><ShieldAlert size={18} className="text-blue-600" /></div>
                         <div>
                           <span className="text-xs font-bold tracking-wider text-blue-800 uppercase mb-1 block">DPO Compliance Summary</span>
+                          <p className="text-[10px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1 mb-2">
+                            ⚠️ <strong>Informational only.</strong> This is AI-generated content and does not constitute legal advice. Consult a qualified Data Protection Officer or legal professional before making compliance decisions.
+                          </p>
                           <p className="text-slate-800 text-sm leading-relaxed font-medium mb-5">{record.professionalDescription}</p>
 
                           {/* Action Buttons */}
@@ -426,6 +429,9 @@ export default function Dashboard() {
 
               {modal.type === 'report' && modal.data && (
                 <div id="modal-pdf-content" className="p-8 space-y-6 text-sm text-slate-700 bg-white font-sans w-full">
+                  <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-2 text-xs text-amber-800">
+                    ⚠️ <strong>Informational only.</strong> This report is AI-generated and does not constitute legal advice or a formal compliance assessment. Verify all findings with a qualified legal professional.
+                  </div>
                   <div className="flex justify-between items-start border-b border-slate-200 pb-4 mb-4">
                     <div className="flex-1 pr-4">
                       <h3 className="text-xl font-bold text-slate-900 mb-2">{modal.data.title}</h3>

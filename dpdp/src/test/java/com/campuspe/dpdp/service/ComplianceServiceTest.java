@@ -25,6 +25,13 @@ class ComplianceServiceTest {
     @Mock
     private AiServiceClient aiServiceClient;
 
+    /**
+     * AsyncEnricher is mocked here because ComplianceService now delegates
+     * the @Async enrichment to this separate bean (fixing the self-invocation problem).
+     */
+    @Mock
+    private AsyncEnricher asyncEnricher;
+
     @InjectMocks
     private ComplianceService service;
 
@@ -39,10 +46,32 @@ class ComplianceServiceTest {
         ComplianceRecord record = new ComplianceRecord();
         record.setRawInput("Test data leak");
         record.setUser(testUser);
+
+        // The first save (immediate) returns the record
         when(repository.save(any())).thenReturn(record);
+        // AsyncEnricher.enrichRecordWithAi is mocked — no actual async call in tests
+        doNothing().when(asyncEnricher).enrichRecordWithAi(any(), any());
 
         ComplianceRecord saved = service.createRecord("Test data leak", testUser);
         assertNotNull(saved);
+        // Verify that async enrichment was triggered
+        verify(asyncEnricher, times(1)).enrichRecordWithAi(any(), eq("Test data leak"));
+    }
+
+    @Test
+    void createRecord_AsyncEnricherIsCalled() {
+        User testUser = new User("testuser", "hashed", Role.USER);
+        ComplianceRecord record = new ComplianceRecord();
+        record.setRawInput("Cloud data processing incident");
+        record.setUser(testUser);
+
+        when(repository.save(any())).thenReturn(record);
+        doNothing().when(asyncEnricher).enrichRecordWithAi(any(), any());
+
+        service.createRecord("Cloud data processing incident", testUser);
+
+        // The async enricher must be called once per record creation
+        verify(asyncEnricher, times(1)).enrichRecordWithAi(any(), anyString());
     }
 
     @Test
@@ -63,5 +92,13 @@ class ComplianceServiceTest {
     void getRecordById_NotFound() {
         when(repository.findById(99L)).thenReturn(Optional.empty());
         assertNull(service.getRecordById(99L));
+    }
+
+    @Test
+    void getRecordsByUserId_ReturnsUserRecords() {
+        ComplianceRecord r1 = new ComplianceRecord();
+        when(repository.findByUserId(42L)).thenReturn(List.of(r1));
+        List<ComplianceRecord> results = service.getRecordsByUserId(42L);
+        assertEquals(1, results.size());
     }
 }

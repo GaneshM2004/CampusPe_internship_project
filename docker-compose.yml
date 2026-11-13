@@ -1,6 +1,26 @@
 version: '3.8'
+
+# ─────────────────────────────────────────────────────────────────────────────
+# DPDP Act Compliance Centre — Docker Compose
+#
+# BEFORE STARTING:
+#   1. Copy .env.example to .env
+#   2. Fill in GROQ_API_KEY and JWT_SECRET with real values
+#   3. Run: docker-compose up --build
+#
+# SECRETS:
+#   All sensitive values come from the .env file (never committed to source control).
+#   See .env.example for required variables.
+#
+# FRONTEND:
+#   The React frontend is NOT containerized in this Compose file.
+#   Run it locally: cd frontend && npm install && npm run dev
+#   It connects to the backend at http://localhost:8080.
+# ─────────────────────────────────────────────────────────────────────────────
+
 services:
-  # PostgreSQL Database
+
+  # ── PostgreSQL ──────────────────────────────────────────────────────────────
   postgres:
     image: postgres:16-alpine
     ports:
@@ -8,36 +28,86 @@ services:
     environment:
       POSTGRES_DB: dpdp_db
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-change_me}
     volumes:
       - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d dpdp_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
-  # Python AI Service
+  # ── Redis ───────────────────────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redisdata:/data
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── Flask AI Microservice ───────────────────────────────────────────────────
   ai-service:
     build: ./ai-service
     ports:
       - "5000:5000"
     environment:
       - GROQ_API_KEY=${GROQ_API_KEY}
+      # Redis host — must use the Compose service name, NOT localhost
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+    volumes:
+      # Persist ChromaDB data across container restarts
+      - chromadata:/app/chroma_data
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5000/health')"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
 
-  # Redis Cache (Required by AI and Java)
-  redis:
-    image: redis:7-alpine
-    ports:
-      - "6379:6379"
-
-  # Java Backend
+  # ── Spring Boot Backend ─────────────────────────────────────────────────────
   backend:
     build: ./dpdp
     ports:
       - "8080:8080"
     depends_on:
-      - redis
-      - postgres
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      ai-service:
+        condition: service_healthy
     environment:
+      # Database — connects to Compose postgres service (not localhost)
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/dpdp_db
       SPRING_DATASOURCE_USERNAME: postgres
-      SPRING_DATASOURCE_PASSWORD: postgres
+      SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD:-change_me}
+      SPRING_DATASOURCE_DRIVER_CLASS_NAME: org.postgresql.Driver
+      SPRING_JPA_DATABASE_PLATFORM: org.hibernate.dialect.PostgreSQLDialect
+      # AI service — connects to Compose ai-service (not localhost)
+      AI_SERVICE_URL: http://ai-service:5000
+      # JWT secret — read from .env, falls back to dev placeholder if unset
+      JWT_SECRET: ${JWT_SECRET:-dGhpcy1pcy1hLXZlcnktc2VjdXJlLWp3dC1zZWNyZXQta2V5LWZvci1kcGRwLWFwcGxpY2F0aW9u}
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8080/actuator/health"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 45s
 
 volumes:
   pgdata:
+    driver: local
+  redisdata:
+    driver: local
+  chromadata:
+    driver: local
