@@ -1,18 +1,54 @@
-# SECURITY.md - DPDP Act Compliance Centre
+# Security Policy & Architecture
 
-## 1. Security Overview
-[cite_start]This project implements a multi-layered security architecture to protect sensitive data processing logs and AI interactions[cite: 17, 73].
+This document outlines the security architecture, authentication mechanisms, and authorization controls implemented in the **DPDP Act Compliance Centre**.
 
-## 2. OWASP Top 10 Risk Mitigation
-| Risk | Attack Scenario | Mitigation Strategy |
-| :--- | :--- | :--- |
-| **A01: Broken Access Control** | An unauthorized user attempts to delete compliance records via the API. | **Spring Security + JWT:** Implemented Role-Based Access Control (RBAC). [cite_start]Endpoints are restricted to ADMIN and MANAGER roles using `@PreAuthorize`[cite: 17, 73]. |
-| **A03: Injection (SQL)** | An attacker enters malicious SQL code into the search bar to leak the database. | [cite_start]**JPA Parameterized Queries:** All database interactions use Spring Data JPA, which prevents SQL injection by treating input as data, not executable code[cite: 17, 71]. |
-| **A03: Injection (AI Prompt)** | A user tries to "jailbreak" the AI to ignore DPDP rules via a specifically crafted input. | [cite_start]**Input Sanitization:** Python middleware strips HTML and detects common prompt injection patterns before sending data to Groq[cite: 71]. |
-| **A04: Insecure Design** | The AI service is overwhelmed by a bot, causing a denial of service (DoS). | [cite_start]**Rate Limiting:** Implemented `flask-limiter` on the AI microservice, restricting users to $30 \text{ req/min}$[cite: 17, 71]. |
-| **A07: Identification Failures** | An attacker attempts to intercept session data to impersonate a Data Protection Officer. | **Stateless JWT:** Authentication is handled via signed JSON Web Tokens. [cite_start]No session data is stored on the server[cite: 17, 71]. |
+---
 
-## 3. Security Sign-off
-- [X] JWT Enforcement Verified
-- [X] Input Sanitization Active
-- [cite_start][X] Rate Limiting Confirmed [cite: 79]
+## 1. Authentication Architecture
+
+- **Stateless JWT Authentication:**
+  - Clients authenticate via `POST /api/auth/login`.
+  - Spring Boot issues an HMAC-signed JSON Web Token (`jjwt-api 0.12.6`).
+  - Tokens encode the user's ID, username, and assigned role (`ROLE_USER` or `ROLE_ADMIN`).
+  - All subsequent requests to `/api/records/**` must carry `Authorization: Bearer <token>`.
+- **JWT Key Management:**
+  - The signing secret is externalized via the `JWT_SECRET` environment variable.
+  - The secret must be a base64-encoded $\ge 256$-bit key. Hardcoding secrets in source files is prohibited.
+  - Default placeholder keys are restricted to local development environments.
+
+---
+
+## 2. Server-Side Authorization Controls
+
+Authorization is strictly enforced in `ComplianceController.java` rather than relying on frontend role checks:
+
+| Endpoint | Method | Required Role / Ownership | Enforcement Mechanism |
+|---|---|---|---|
+| `/api/auth/**` | `POST` | Public | Explicitly permitted in `SecurityConfig.java` |
+| `/api/records` | `POST` | Authenticated | User identity extracted from JWT and bound to record |
+| `/api/records` | `GET` | Authenticated | `ROLE_ADMIN` sees all records; `ROLE_USER` queries only records matching their user ID |
+| `/api/records/{id}/recommendations` | `GET` | Owner or `ROLE_ADMIN` | `requestingUserId.equals(ownerUserId)` check; returns HTTP 403 Forbidden if mismatched |
+| `/api/records/{id}/report` | `GET` | Owner or `ROLE_ADMIN` | `requestingUserId.equals(ownerUserId)` check; returns HTTP 403 Forbidden if mismatched |
+| `/api/records/export` | `GET` | `ROLE_ADMIN` Only | `isAdmin(authentication)` check; returns HTTP 403 Forbidden for non-admin users |
+
+---
+
+## 3. Data Protection & Asynchronous State Transitions
+
+1. **Self-Invocation Proxy Protection:**
+   - Asynchronous enrichment is isolated inside `AsyncEnricher.java` (a dedicated Spring bean), preventing self-invocation proxy bypass and ensuring thread-pool execution.
+2. **Deterministic State Progression:**
+   - Record submission immediately creates a record with `status: "PENDING"`.
+   - On successful AI enrichment, the state transitions to `"COMPLETED"`.
+   - On upstream AI timeout or failure, the record safely transitions to `"FAILED"`, preventing UI polling deadlocks.
+3. **Safe Error Handling:**
+   - Pydantic validation failures return structured error messages without exposing internal stack traces, system paths, or model credentials.
+   - Redis caching suppresses and never persists error payloads or provider outages.
+
+---
+
+## 4. Container & Network Security
+
+- In Docker Compose, internal communication between services (`backend` $\to$ `ai-service`, `backend` $\to$ `postgres`, `ai-service` $\to$ `redis`) utilizes isolated Docker virtual network DNS names, not `localhost`.
+- Persistent storage for databases and vector embeddings is isolated in named Docker volumes (`pgdata`, `redisdata`, `chromadata`).
+- Port 5432 (Postgres) and 6379 (Redis) should be bound only to localhost or unexposed in production environments.

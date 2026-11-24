@@ -36,6 +36,8 @@ class CitationItem(BaseModel):
     source: str
     section: Optional[str] = "N/A"
     page: Optional[int] = None
+    file_sha256: Optional[str] = None
+    text_hash: Optional[str] = None
 
 
 # ── POST /describe ───────────────────────────────────────────────────────────

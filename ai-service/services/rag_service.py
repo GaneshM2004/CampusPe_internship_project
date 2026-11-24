@@ -77,7 +77,9 @@ def retrieve_rag_context(
             "chunk_id": str(cid),
             "source": str(source),
             "section": str(section),
-            "page": page_num
+            "page": page_num,
+            "file_sha256": meta.get("file_sha256"),
+            "text_hash": meta.get("text_hash")
         }
         citations.append(citation)
 

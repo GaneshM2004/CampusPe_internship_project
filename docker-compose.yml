@@ -100,7 +100,7 @@ services:
       # JWT secret — read from .env, falls back to dev placeholder if unset
       JWT_SECRET: ${JWT_SECRET:-dGhpcy1pcy1hLXZlcnktc2VjdXJlLWp3dC1zZWNyZXQta2V5LWZvci1kcGRwLWFwcGxpY2F0aW9u}
     healthcheck:
-      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8080/actuator/health"]
+      test: ["CMD-SHELL", "nc -z localhost 8080 || exit 1"]
       interval: 15s
       timeout: 10s
       retries: 5

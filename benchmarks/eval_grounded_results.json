@@ -1,5 +1,5 @@
 {
-  "timestamp": "2026-11-24T12:50:57.580417+00:00",
+  "timestamp": "2026-11-24T13:22:38.287487+00:00",
   "total_test_cases": 5,
   "chromadb_chunks_in_db": 232,
   "retrieval_coverage_percent": 100.0,
@@ -7,7 +7,12 @@
   "citations_verified": 15,
   "citation_accuracy_percent": 100.0,
   "invalid_citation_rate_percent": 0.0,
-  "disclaimer": "Evaluated strictly on the defined test set. Not a universal guarantee.",
+  "metric_definitions": {
+    "retrieval_coverage": "Percentage of test queries retrieving candidate chunks from ChromaDB.",
+    "citations_verified": "Percentage of citation chunk IDs verified against existing ChromaDB chunk metadata.",
+    "legal_accuracy": "NOT MEASURED. AI output is informational assistance and is not guaranteed legally accurate."
+  },
+  "disclaimer": "Evaluated strictly on the defined test set. Not a universal guarantee or legal certification.",
   "test_results": [
     {
       "test_id": "TC-001",
@@ -20,21 +25,27 @@
           "chunk_id": "dpdp_act_2023_p8_c4",
           "source": "DPDP_ACT_2023.pdf",
           "section": "10. (1) The Central Government may notify any Data Fiduciary",
-          "page": 8
+          "page": 8,
+          "file_sha256": "4deb23981d3010c8225a2ff6149e7243dc2268455b299e283afebdd7b72a7d15",
+          "text_hash": "22963d450bfe2ca2"
         },
         {
           "doc_id": "dpdp_rules_2025",
           "chunk_id": "dpdp_rules_2025_p4_c4",
           "source": "DPDP_Rules_2025_English_only.pdf",
           "section": "7. Intimation of personal data breach . \u2014 (1) On becoming aware of any personal",
-          "page": 4
+          "page": 4,
+          "file_sha256": "63bc7ca508ae4ebbbbf8731d336914d94ee6067e918b719d019193371fcc0763",
+          "text_hash": "27af86c9fadb29b0"
         },
         {
           "doc_id": "dpdp_act_2023",
           "chunk_id": "dpdp_act_2023_p8_c3",
           "source": "DPDP_ACT_2023.pdf",
           "section": "10. (1) The Central Government may notify any Data Fiduciary",
-          "page": 8
+          "page": 8,
+          "file_sha256": "4deb23981d3010c8225a2ff6149e7243dc2268455b299e283afebdd7b72a7d15",
+          "text_hash": "697c1e3470133143"
         }
       ],
       "citations_count": 3,
@@ -51,21 +62,27 @@
           "chunk_id": "dpdp_act_2023_p21_c0",
           "source": "DPDP_ACT_2023.pdf",
           "section": "44. (1) In section 14 of the Telecom Regulatory Authority of",
-          "page": 21
+          "page": 21,
+          "file_sha256": "4deb23981d3010c8225a2ff6149e7243dc2268455b299e283afebdd7b72a7d15",
+          "text_hash": "2ca883c81f0f196f"
         },
         {
           "doc_id": "dpdp_rules_2025",
           "chunk_id": "dpdp_rules_2025_p3_c6",
           "source": "DPDP_Rules_2025_English_only.pdf",
           "section": "7. Intimation of personal data breach . \u2014 (1) On becoming aware of any personal",
-          "page": 3
+          "page": 3,
+          "file_sha256": "63bc7ca508ae4ebbbbf8731d336914d94ee6067e918b719d019193371fcc0763",
+          "text_hash": "871fc19bf0354e08"
         },
         {
           "doc_id": "dpdp_rules_2025",
           "chunk_id": "dpdp_rules_2025_p3_c4",
           "source": "DPDP_Rules_2025_English_only.pdf",
           "section": "7. Intimation of personal data breach . \u2014 (1) On becoming aware of any personal",
-          "page": 3
+          "page": 3,
+          "file_sha256": "63bc7ca508ae4ebbbbf8731d336914d94ee6067e918b719d019193371fcc0763",
+          "text_hash": "027e04da00f71365"
         }
       ],
       "citations_count": 3,
@@ -82,21 +99,27 @@
           "chunk_id": "dpdp_act_2023_p8_c4",
           "source": "DPDP_ACT_2023.pdf",
           "section": "10. (1) The Central Government may notify any Data Fiduciary",
-          "page": 8
+          "page": 8,
+          "file_sha256": "4deb23981d3010c8225a2ff6149e7243dc2268455b299e283afebdd7b72a7d15",
+          "text_hash": "22963d450bfe2ca2"
         },
         {
           "doc_id": "dpdp_rules_2025",
           "chunk_id": "dpdp_rules_2025_p14_c4",
           "source": "DPDP_Rules_2025_English_only.pdf",
           "section": "4. For the determination of real -time location of",
-          "page": 14
+          "page": 14,
+          "file_sha256": "63bc7ca508ae4ebbbbf8731d336914d94ee6067e918b719d019193371fcc0763",
+          "text_hash": "0736b0dabb5cd397"
         },
         {
           "doc_id": "dpdp_rules_2025",
           "chunk_id": "dpdp_rules_2025_p14_c0",
           "source": "DPDP_Rules_2025_English_only.pdf",
           "section": "4. For the determination of real -time location of",
-          "page": 14
+          "page": 14,
+          "file_sha256": "63bc7ca508ae4ebbbbf8731d336914d94ee6067e918b719d019193371fcc0763",
+          "text_hash": "201fab29c452dd46"
         }
       ],
       "citations_count": 3,
@@ -113,21 +136,27 @@
           "chunk_id": "dpdp_act_2023_p17_c0",
           "source": "DPDP_ACT_2023.pdf",
           "section": "37. (1) The Central Government or any of its officers specia",
-          "page": 17
+          "page": 17,
+          "file_sha256": "4deb23981d3010c8225a2ff6149e7243dc2268455b299e283afebdd7b72a7d15",
+          "text_hash": "da49c5def0813810"
         },
         {
           "doc_id": "dpdp_act_2023",
           "chunk_id": "dpdp_act_2023_p21_c0",
           "source": "DPDP_ACT_2023.pdf",
           "section": "44. (1) In section 14 of the Telecom Regulatory Authority of",
-          "page": 21
+          "page": 21,
+          "file_sha256": "4deb23981d3010c8225a2ff6149e7243dc2268455b299e283afebdd7b72a7d15",
+          "text_hash": "2ca883c81f0f196f"
         },
         {
           "doc_id": "dpdp_act_2023",
           "chunk_id": "dpdp_act_2023_p14_c1",
           "source": "DPDP_ACT_2023.pdf",
           "section": "28. (1) The Board shall function as an independent body and",
-          "page": 14
+          "page": 14,
+          "file_sha256": "4deb23981d3010c8225a2ff6149e7243dc2268455b299e283afebdd7b72a7d15",
+          "text_hash": "3887da2b651a3343"
         }
       ],
       "citations_count": 3,
@@ -144,21 +173,27 @@
           "chunk_id": "dpdp_act_2023_p11_c0",
           "source": "DPDP_ACT_2023.pdf",
           "section": "17. (1) The provisions of Chapter II, except sub-sections (",
-          "page": 11
+          "page": 11,
+          "file_sha256": "4deb23981d3010c8225a2ff6149e7243dc2268455b299e283afebdd7b72a7d15",
+          "text_hash": "6b84973622390a29"
         },
         {
           "doc_id": "dpdp_rules_2025",
           "chunk_id": "dpdp_rules_2025_p7_c2",
           "source": "DPDP_Rules_2025_English_only.pdf",
           "section": "14. Rights of Data Principals . \u2014 (1) For enabling Data Principals to exercise t",
-          "page": 7
+          "page": 7,
+          "file_sha256": "63bc7ca508ae4ebbbbf8731d336914d94ee6067e918b719d019193371fcc0763",
+          "text_hash": "45f25bc48b4460b4"
         },
         {
           "doc_id": "dpdp_rules_2025",
           "chunk_id": "dpdp_rules_2025_p7_c3",
           "source": "DPDP_Rules_2025_English_only.pdf",
           "section": "14. Rights of Data Principals . \u2014 (1) For enabling Data Principals to exercise t",
-          "page": 7
+          "page": 7,
+          "file_sha256": "63bc7ca508ae4ebbbbf8731d336914d94ee6067e918b719d019193371fcc0763",
+          "text_hash": "1d68bc62dfa0820f"
         }
       ],
       "citations_count": 3,

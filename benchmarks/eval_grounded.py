@@ -151,16 +151,18 @@ def run_grounding_evaluation():
     )
 
     print("\n" + "=" * 70)
-    print("EVALUATION SUMMARY")
+    print("EVALUATION SUMMARY (METRIC DEFINITIONS)")
     print("=" * 70)
     print(f"Total Test Cases:              {num_tests}")
-    print(f"Retrieval Coverage:            {retrieval_coverage_pct}% ({retrieval_successes}/{num_tests} queries matched context)")
+    print(f"Retrieval Coverage:            {retrieval_coverage_pct}% ({retrieval_successes}/{num_tests} queries retrieved candidate chunks)")
     print(f"Total Citations Generated:     {total_citations}")
     print(f"Citations Verified in Chroma:  {valid_citations}/{total_citations} ({citation_accuracy_pct}%)")
     print(f"Invalid Citation Rate:         {invalid_citation_rate_pct}%")
     print("=" * 70)
-    print("NOTE: These results apply strictly to this reviewed test set and the active")
-    print("knowledge base. They do NOT provide a universal guarantee of 100% grounding.")
+    print("DEFINITIONS & IMPORTANT NOTICE:")
+    print("1. 'Retrieval Coverage' measures candidate chunk retrieval from the local vector store.")
+    print("2. 'Citations Verified' confirms chunk IDs match real metadata in ChromaDB.")
+    print("3. Neither metric measures legal accuracy, regulatory compliance, or advice correctness.")
     print("=" * 70)
 
     # Save artifact
@@ -175,7 +177,12 @@ def run_grounding_evaluation():
         "citations_verified": valid_citations,
         "citation_accuracy_percent": citation_accuracy_pct,
         "invalid_citation_rate_percent": invalid_citation_rate_pct,
-        "disclaimer": "Evaluated strictly on the defined test set. Not a universal guarantee.",
+        "metric_definitions": {
+            "retrieval_coverage": "Percentage of test queries retrieving candidate chunks from ChromaDB.",
+            "citations_verified": "Percentage of citation chunk IDs verified against existing ChromaDB chunk metadata.",
+            "legal_accuracy": "NOT MEASURED. AI output is informational assistance and is not guaranteed legally accurate."
+        },
+        "disclaimer": "Evaluated strictly on the defined test set. Not a universal guarantee or legal certification.",
         "test_results": results
     }
     with open(output_file, "w", encoding="utf-8") as f:

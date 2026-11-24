@@ -5,7 +5,7 @@ from flask import Blueprint, request, jsonify
 from pydantic import ValidationError
 
 from services.groq_client import GroqClient
-from services.rag_service import retrieve_rag_context
+from services.rag_service import retrieve_rag_context, REQUIRE_GROUNDING
 from services.cache_service import compute_cache_key
 from schemas import (
     CategoriseRequest,
@@ -68,6 +68,13 @@ def categorise():
 
     # 3. RAG Retrieval from ChromaDB
     grounded, context_block, citations, _ = retrieve_rag_context(chroma, req.text)
+
+    if REQUIRE_GROUNDING and not grounded:
+        return jsonify({
+            "error": "Insufficient source context in knowledge base to categorise compliance item",
+            "grounded": False,
+            "citations": []
+        }), 422
 
     categories_str = " | ".join(DPDP_CATEGORIES)
 
