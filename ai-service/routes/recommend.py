@@ -1,11 +1,17 @@
+import hashlib
 import os
 from flask import Blueprint, request, jsonify
+from pydantic import ValidationError
+
 from services.groq_client import GroqClient
+from services.rag_service import retrieve_rag_context, REQUIRE_GROUNDING
+from services.cache_service import compute_cache_key
+from schemas import RecommendRequest, RecommendResponse, format_validation_error
 
 recommend_bp = Blueprint('recommend', __name__)
 
-# Use the shared GroqClient (testable via mocks)
 _groq = GroqClient()
+MODEL_ID = "llama-3.3-70b-versatile"
 
 
 def _load_prompt():
@@ -15,35 +21,81 @@ def _load_prompt():
         return f.read()
 
 
+def _get_prompt_version():
+    try:
+        content = _load_prompt()
+        return hashlib.sha256(content.encode('utf-8')).hexdigest()[:12]
+    except Exception:
+        return "v1"
+
+
 @recommend_bp.route('/recommend', methods=['POST'])
 def recommend():
-    # 1. Validate Input
+    from app import get_chroma, get_cache_service
+    chroma = get_chroma()
+    cache_svc = get_cache_service()
+
+    # 1. Pydantic Request Validation
     data = request.get_json(silent=True)
-    if not data or 'input_text' not in data:
-        return jsonify({"error": "Bad Request: Missing 'input_text' in JSON body"}), 400
+    if data is None:
+        return jsonify({"error": "Bad Request: Missing JSON body"}), 400
 
-    raw_input = data['input_text']
-    if not isinstance(raw_input, str) or not raw_input.strip():
-        return jsonify({"error": "Bad Request: 'input_text' must be a non-empty string"}), 400
-    if len(raw_input) > 5000:
-        return jsonify({"error": "Bad Request: 'input_text' exceeds 5000 characters"}), 400
+    try:
+        req = RecommendRequest.model_validate(data)
+    except ValidationError as e:
+        return jsonify(format_validation_error(e)), 400
 
-    # 2. Load and Format Prompt
+    corpus_ver = chroma.get_corpus_version() if chroma else "none"
+    prompt_ver = _get_prompt_version()
+
+    # 2. Redis Cache Lookup
+    cache_key = compute_cache_key("recommend", req.input_text, prompt_ver, MODEL_ID, corpus_ver)
+    cached_result = cache_svc.get(cache_key)
+    if cached_result is not None:
+        return jsonify(cached_result), 200
+
+    # 3. RAG Retrieval from ChromaDB
+    grounded, context_block, citations, disclaimer = retrieve_rag_context(chroma, req.input_text)
+
+    if REQUIRE_GROUNDING and not grounded:
+        return jsonify({
+            "error": "Insufficient source context in knowledge base to generate grounded output",
+            "grounded": False,
+            "citations": []
+        }), 422
+
+    # 4. Format Prompt with Context
     try:
         prompt_template = _load_prompt()
-        formatted_prompt = prompt_template.replace('{user_input}', raw_input)
+        formatted_prompt = prompt_template.replace('{user_input}', req.input_text)
+        formatted_prompt = formatted_prompt.replace('{context_block}', context_block)
     except Exception:
         return jsonify({"error": "Internal Server Error: Failed to load prompt"}), 500
 
-    # 3. Call Groq via shared GroqClient (mockable in tests)
+    # 5. Call Groq
     messages = [{"role": "user", "content": formatted_prompt}]
-    result = _groq.call_for_json(messages, temperature=0.3, max_tokens=1000)
+    raw_ai = _groq.call_for_json(messages, temperature=0.3, max_tokens=1000)
 
-    if result is None:
+    if raw_ai is None:
         return jsonify({"error": "AI service temporarily unavailable. Please retry."}), 503
 
-    # 4. Validate the expected key exists
-    if "recommendations" not in result or not isinstance(result["recommendations"], list):
+    if not isinstance(raw_ai, dict) or "recommendations" not in raw_ai or not isinstance(raw_ai["recommendations"], list):
         return jsonify({"error": "AI returned an unexpected response format."}), 502
 
-    return jsonify(result), 200
+    # 6. Pydantic Response Validation
+    try:
+        response_model = RecommendResponse(
+            recommendations=raw_ai["recommendations"],
+            grounded=grounded,
+            citations=citations,
+            disclaimer=disclaimer
+        )
+    except ValidationError as e:
+        return jsonify({"error": f"AI response validation error: {e.errors()}"}), 502
+
+    result_dict = response_model.model_dump()
+
+    # 7. Write to Redis Cache
+    cache_svc.set(cache_key, result_dict)
+
+    return jsonify(result_dict), 200

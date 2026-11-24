@@ -5,7 +5,8 @@ Your task is to generate a comprehensive, professional compliance report based o
 RULES:
 1. Maintain a highly formal, objective, and executive-level tone.
 2. Analyze the input strictly through the lens of the DPDP Act.
-3. You must return ONLY valid JSON in the exact format below. Do not include markdown formatting or conversational text.
+3. Ground your findings and recommendations in any authoritative DPDP Act context provided below.
+4. You must return ONLY valid JSON in the exact format below. Do not include markdown formatting or conversational text.
 
 EXPECTED JSON FORMAT:
 {
@@ -25,3 +26,4 @@ EXPECTED JSON FORMAT:
 
 RAW INPUT TO ANALYZE:
 {user_input}
+{context_block}

@@ -1,0 +1,35 @@
+{
+  "timestamp": "2026-11-14T09:09:59.940119+00:00",
+  "environment": {
+    "os": "Windows-11-10.0.26200-SP0",
+    "python": "3.13.5",
+    "mode": "deterministic_mock",
+    "mock_delay_ms": 250.0
+  },
+  "samples": 25,
+  "warmup": 3,
+  "uncached_stats": {
+    "count": 25,
+    "min": 252.55,
+    "p50": 253.62,
+    "p90": 254.76,
+    "p95": 254.76,
+    "p99": 258.08,
+    "max": 258.08,
+    "mean": 253.77,
+    "stddev": 1.1
+  },
+  "cached_stats": {
+    "count": 25,
+    "min": 1.24,
+    "p50": 1.38,
+    "p90": 2.32,
+    "p95": 2.41,
+    "p99": 2.41,
+    "max": 2.41,
+    "mean": 1.59,
+    "stddev": 0.38
+  },
+  "latency_reduction_percent": 99.46,
+  "speedup_factor": 183.78
+}

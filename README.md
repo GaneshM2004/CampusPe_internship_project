@@ -1,205 +1,425 @@
-# Tool-15: DPDP Act Compliance Centre
+# DPDP Act Compliance Centre
 
-## 1. Project Overview
+A full-stack legal/compliance assistance application built for the **Digital Personal Data Protection Act, 2023 (India)**. The system uses a React frontend, Spring Boot backend, and a Python Flask AI microservice backed by **Groq Cloud LLM**, **ChromaDB vector search**, and **Redis caching**.
 
-The **DPDP Act Compliance Centre** is an AI-powered MVP designed to assist organizations in navigating the India **Digital Personal Data Protection (DPDP) Act**.
-
-This real-world application uses an industry-standard tech stack to provide automated data protection auditing, compliance recommendations, and AI-generated reports.
+> **Legal Disclaimer:** This application provides **informational assistance only**. It is not a substitute for qualified legal advice. AI-generated output cannot guarantee regulatory compliance or legal accuracy. Retrieved source documents improve traceability but do not eliminate the possibility of incorrect or incomplete AI output. Never treat this tool as definitive legal guidance.
 
 ---
 
-## 2. System Architecture
+## Architecture
 
-This project follows a **3-tier microservice architecture** to ensure scalability and separation of concerns.
-
-```text
-      [ React 18 + Vite Frontend ]
-                | (Port 80)
-                v
-      [ Spring Boot 3.x Backend ] <---> [ PostgreSQL 15 ]
-                | (Port 8080)              |
-                v                          +--> [ Redis 7 Cache ]
-      [ Flask 3.x AI Microservice ]
-                | (Port 5000)
-                +---> [ Groq Cloud API (Llama-3.3-70b) ]
-                +---> [ ChromaDB Vector Store ]
+```
+React (Vite)                    Spring Boot (Java 21)         Flask AI Microservice (Python 3.13)
+   │                                    │                               │
+   │── POST /api/compliance ──────────► │── POST /describe ────────────►│── Pydantic validation
+   │                                    │── POST /categorise ──────────►│── Redis cache lookup
+   │◄── JSON response ─────────────────│── POST /recommend ───────────►│── ChromaDB RAG retrieval
+   │                                    │── POST /generate-report ─────►│── Groq LLM call
+   │── GET /api/compliance (CSV) ──────►│                               │── Pydantic response validation
+                                        │                               │── Redis cache write
+                                        │◄──── JSON (grounded, citations, disclaimer) ─────────────│
+                                        │
+                               PostgreSQL (compliance records)
+                               Redis (AI response cache)
+                               ChromaDB (DPDP Act vector store)
 ```
 
-### Request Flow
+### Services
 
-1. **User Action (React UI)**: User logs in (JWT issued), submits a raw data processing description.
-2. **Spring Boot Controller**: Validates the JWT, attaches the authenticated `User`, saves a `ComplianceRecord` with status `PROCESSING`.
-3. **Async Enrichment**: Spring delegates via `AsyncEnricher` (a separate bean to avoid proxy self-invocation bypass) to call `AiServiceClient`.
-4. **Flask Microservice**: Receives the request at `/describe`, formats the prompt, calls the Groq Cloud API via `GroqClient` with exponential backoff retries, and returns structured JSON.
-5. **Database Update**: The backend updates the record with the professional description and sets status to `COMPLETED`.
-6. **Frontend Polling**: The React dashboard polls `/api/records` every 3 seconds, picks up the completed record, and updates the compliance analytics charts.
-7. **Recommendations & Reports**: On-demand user actions trigger `/api/records/{id}/recommendations` and `/api/records/{id}/report`, with ownership enforced by the backend before calling the AI microservice.
+| Service | Technology | Port |
+|---------|-----------|------|
+| Frontend | React 18 + Vite | 5173 (dev) |
+| Backend | Spring Boot 3 / Java 21 | 8080 |
+| AI Microservice | Python 3.13 / Flask | 5000 |
+| Database | PostgreSQL 16 | 5432 |
+| Cache | Redis 7 | 6379 |
+| Vector Store | ChromaDB (embedded) | — |
 
----
-
-## 3. Tech Stack
-
-### Backend
-- Java 17
-- Spring Boot 3.x
-- Spring Security + JWT
-- Flyway
-- PostgreSQL 15
-- Redis 7
-
-### AI Service
-- Python 3.11
-- Flask 3.x
-- Groq API (Llama-3.3-70b)
-- ChromaDB
-- sentence-transformers
-
-### Frontend
-- React 18+
-- Vite
-- Tailwind CSS
-- Axios
-- Recharts
-
-### Infrastructure
-- Docker
-- Docker Compose
+> **Note:** The React frontend is **not containerized** in Docker Compose. Run it locally with `npm run dev`.
 
 ---
 
-## 4. Environment Variables
+## Request Flow (End-to-End)
 
-Create a `.env` file in the project root directory.
-
-### Required Variables
-
-| Variable | Description | Example |
-|----------|-------------|----------|
-| `GROQ_API_KEY` | API key from Groq Cloud | `gsk_xxxx...` |
-| `DB_PASSWORD` | PostgreSQL password | `postgres` |
-| `JWT_SECRET` | Secret key for JWT token signing | `your_secret_key` |
-| `VITE_API_URL` | Frontend URL for backend access | `http://localhost:8080` |
+1. **React UI** sends a form submission to Spring Boot (`POST /api/compliance`).
+2. **Spring Boot** (`ComplianceController`) validates the JWT, persists the record to PostgreSQL, then asynchronously calls the Flask AI service via `AiServiceClient`.
+3. **Flask AI service** (`/describe`, `/categorise`, `/recommend`, `/generate-report`):
+   a. **Pydantic** validates the request (type, required fields, whitespace, length ≤ 5 000 chars).
+   b. **Redis** is checked for a cached response (5-factor key: endpoint + normalized input + prompt hash + model ID + corpus version).
+   c. **ChromaDB** is queried with the user's text using `sentence-transformers/all-MiniLM-L6-v2`; relevant chunks are retrieved (default top-k = 3).
+   d. Retrieved chunks and their metadata are injected into the **Groq LLM prompt**.
+   e. The LLM response is **validated by Pydantic**; malformed responses return 502.
+   f. The result (with `grounded`, `citations`, `disclaimer` fields) is **cached in Redis** (TTL = 3 600 s by default).
+4. **Spring Boot** enriches the compliance record with the AI result asynchronously (`AsyncEnricher`).
+5. **React UI** displays the enriched result with an AI disclaimer badge.
 
 ---
 
-## 5. Setup & Installation
+## RAG Pipeline — Important Limitations
 
-### 1. Clone the Repository
+### Current Knowledge Base State
+
+The ChromaDB instance currently contains **2 demo chunks** loaded automatically from the `ChromaClient.__main__` test block. These chunks contain sample DPDP Act text for testing purposes only.
+
+**They are NOT authoritative source documents.**
+
+### Supplying Authoritative Documents
+
+You **must supply your own DPDP Act source documents** to enable grounded responses:
+
+1. Place `.txt` or `.md` files in `ai-service/documents/`.
+2. Use only official government publications or legally reviewed sources.
+3. Run the ingestion script:
+   ```bash
+   cd ai-service
+   python ingest_documents.py
+   ```
+4. Verify ingestion:
+   ```bash
+   python -c "from services.chroma_client import ChromaClient; c = ChromaClient(); print(c.collection.count(), 'chunks')"
+   ```
+
+> **Re-ingest after document changes:** Run `python ai-service/ingest_documents.py` whenever you add or update source files. The ingestion uses stable chunk IDs and upserts, so re-running is safe and idempotent.
+
+### Grounding Behavior
+
+- When relevant chunks are found: `grounded: true`, `citations: [...]` with real chunk IDs.
+- When no relevant chunks found (or collection empty): `grounded: false`, explicit ungrounded disclaimer.
+- Set `REQUIRE_GROUNDING=true` to make endpoints return 422 instead of proceeding ungrounded.
+- Citations are derived **exclusively from retrieved chunk metadata** — never generated by the LLM.
+
+---
+
+## Environment Variables
+
+Copy `.env.example` to `.env` and fill in real values before starting services.
+
+### Required
+
+| Variable | Service | Description |
+|----------|---------|-------------|
+| `GROQ_API_KEY` | AI service | Groq Cloud API key (console.groq.com/keys) |
+| `JWT_SECRET` | Backend | Base64-encoded ≥256-bit signing secret |
+| `DB_PASSWORD` | Backend / Postgres | PostgreSQL password |
+
+### Optional / Defaults
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `VITE_API_URL` | `http://localhost:8080` | Frontend → backend base URL |
+| `AI_SERVICE_URL` | `http://localhost:5000` | Backend → AI service URL |
+| `REDIS_HOST` | `localhost` | Redis hostname (`redis` in Compose) |
+| `REDIS_PORT` | `6379` | Redis port |
+| `ENABLE_CACHE` | `true` | Enable/disable Redis caching |
+| `CACHE_TTL_SECONDS` | `3600` | Redis TTL per cached response |
+| `CHROMA_DATA_DIR` | `<ai-service>/chroma_data` | ChromaDB persistence directory |
+| `CHROMA_TOP_K` | `3` | Number of chunks to retrieve per query |
+| `CHROMA_MAX_DISTANCE` | *(disabled)* | Distance threshold for retrieval filtering |
+| `REQUIRE_GROUNDING` | `false` | Fail (422) if no context retrieved |
+
+Generate a secure JWT secret:
+```bash
+python -c "import base64, os; print(base64.b64encode(os.urandom(32)).decode())"
+```
+
+---
+
+## Local Development Setup
+
+### Prerequisites
+
+- Java 21+, Maven 3.9+
+- Python 3.13 (with `pip`)
+- Node.js 20+, npm
+- PostgreSQL 16 (or use Docker Compose for the DB only)
+- Redis 7 (or use Docker Compose)
+
+### 1 — AI Microservice (Flask)
 
 ```bash
-git clone [repository-url]
-cd your-project-folder
+cd ai-service
+pip install -r requirements.txt
+# Set env vars
+set GROQ_API_KEY=your_key_here
+set REDIS_HOST=localhost
+python app.py
+# Health check: curl http://localhost:5000/health
 ```
 
-### 2. Configure Environment
-
-Create a `.env` file in the root directory and add your credentials:
-
-```env
-GROQ_API_KEY=gsk_xxxx...
-DB_PASSWORD=postgres
-JWT_SECRET=your_secret_key
-VITE_API_URL=http://localhost:8080
-```
-
-### 3. Start Services
-
-Build and start all containers using Docker Compose:
+### 2 — Backend (Spring Boot)
 
 ```bash
-# 1. Ensure .env exists with your GROQ_API_KEY
-cp .env.example .env
-# Edit .env with your real GROQ_API_KEY
+cd dpdp
+# Edit src/main/resources/application.properties or set env vars:
+# SPRING_DATASOURCE_URL, SPRING_DATASOURCE_PASSWORD, JWT_SECRET, AI_SERVICE_URL
+mvn spring-boot:run
+# Health: curl http://localhost:8080/actuator/health
+```
 
-# 2. Build and start containers
-docker compose up --build
+### 3 — Frontend (React + Vite)
 
-# 3. In a separate terminal, start the frontend
+```bash
 cd frontend
 npm install
+# Optional: create frontend/.env.local with VITE_API_URL=http://localhost:8080
 npm run dev
-```
-
-> **Frontend in Docker**: The React frontend is currently run locally via Vite (`npm run dev`). A containerized frontend service is planned for future work.
-
----
-
-## 6. Access the Application
-
-| Service | URL |
-|---------|-----|
-| Frontend | `http://localhost` |
-| Swagger API Docs | `http://localhost:8080/swagger-ui.html` |
-| AI Health Check | `http://localhost:5000/health` |
-
----
-
-## 7. API Reference (AI Microservice)
-
-### `POST /describe`
-Generates professional DPO summaries based on raw input.
-
-### `POST /recommend`
-Returns 3 actionable compliance recommendations as a JSON array.
-
-### `POST /generate-report`
-Produces a full audit report including executive summaries and findings.
-
-### `POST /categorise`
-Classifies inputs into predefined compliance categories.
-
-### `GET /health`
-Returns:
-- Model uptime
-- Model name
-- ChromaDB statistics
-
----
-
-## 8. Folder Structure
-
-```text
-backend/
- ├── controllers/
- ├── services/
- ├── migrations/
- └── ...
-
-ai-service/
- ├── routes/
- ├── groq-client/
- ├── chromadb-services/
- ├── rag-prompts/
- └── ...
-
-frontend/
- ├── components/
- ├── pages/
- ├── analytics/
- ├── dashboard/
- └── ...
+# Open: http://localhost:5173
 ```
 
 ---
 
-## 9. Features
+## Docker Compose
 
-- AI-powered compliance auditing
-- Automated DPDP Act recommendations
-- Executive audit report generation
-- Compliance categorization system
-- JWT-based authentication
-- Vector search with ChromaDB
-- Real-time analytics dashboard
-- Dockerized microservice deployment
+Docker Compose starts **PostgreSQL, Redis, Flask AI service, and Spring Boot backend**.
+
+> The React frontend is **not** in Compose — run it locally (see above).
+
+```bash
+# 1. Copy and fill the env file
+cp .env.example .env
+# Edit .env: set GROQ_API_KEY, JWT_SECRET, DB_PASSWORD
+
+# 2. Build and start
+docker compose up --build
+
+# 3. Services will be available at:
+#   Backend:    http://localhost:8080
+#   AI service: http://localhost:5000/health
+#   Postgres:   localhost:5432
+#   Redis:      localhost:6379
+```
+
+### Service Dependencies (Compose)
+
+```
+postgres ──► backend
+redis    ──► backend
+redis    ──► ai-service ──► backend
+```
+
+Each service has health checks and waits for its dependencies to be healthy before starting.
+
+### Persistent Volumes
+
+| Volume | Contents |
+|--------|----------|
+| `pgdata` | PostgreSQL data |
+| `redisdata` | Redis AOF persistence |
+| `chromadata` | ChromaDB embeddings |
 
 ---
 
-## 10. Developed By
+## Document Ingestion (RAG Setup)
 
-**Team 7 – Capstone Internship Project**
+```bash
+# From the project root:
+cd ai-service
 
-- **Sprint Duration:** 14 April 2026 – 9 May 2026
-- **Demo Day:** Friday, 9 May 2026
+# Place your .txt or .md source documents in:
+# ai-service/documents/
+
+python ingest_documents.py
+
+# Verify chunk count:
+python -c "
+from services.chroma_client import ChromaClient
+c = ChromaClient()
+print(c.collection.count(), 'chunks in ChromaDB')
+"
+```
+
+The ingestion script:
+- Loads `.txt` / `.md` files from `ai-service/documents/`
+- Chunks text (500 chars with 50-char overlap)
+- Embeds with `sentence-transformers/all-MiniLM-L6-v2`
+- Upserts into ChromaDB with stable chunk IDs (re-running is idempotent)
 
 ---
+
+## Running Tests
+
+### AI Service (Python — 31 tests)
+
+```powershell
+# From the project root on Windows:
+$env:PYTHONPATH="e:\dpdp_Gravity\ai-service"
+python -m pytest ai-service/tests -v
+```
+
+**Expected output:** `31 passed` (no live API key or Redis required; all external services are mocked)
+
+Test coverage includes:
+- RAG grounded and ungrounded paths, citation verification
+- Pydantic validation for all 4 endpoints (empty, whitespace, too long, wrong type, extra fields)
+- Redis cache hit, miss, and outage (graceful degradation)
+- ChromaDB chunking edge cases (empty input, short input, overlap)
+- ChromaDB query when unavailable or collection empty
+- Input sanitization, Groq JSON cleanup logic
+
+### Backend (Java — Maven)
+
+```powershell
+mvn -f dpdp/pom.xml test
+```
+
+**Expected output:** `7 passed` (`DpdpApplicationTests`: 1, `ComplianceServiceTest`: 6)
+
+---
+
+## Benchmarks
+
+Benchmark scripts are in `benchmarks/`. All benchmarks are **offline / mocked** by default and do not require a live API key.
+
+### Cache Latency Benchmark
+
+```bash
+python benchmarks/benchmark_cache.py --samples 25
+```
+
+**Measured result** (Windows 11, Python 3.13, 250 ms simulated AI delay, in-memory Redis mock):
+
+| Metric | Uncached | Cached | Reduction |
+|--------|---------|--------|-----------|
+| p50 latency | 253.62 ms | 1.38 ms | 99.46% |
+| Mean latency | 253.77 ms | 1.59 ms | 99.37% |
+| Speedup factor | — | — | 183.78× |
+
+> **Important:** These results use a **mocked AI call with a fixed 250 ms delay** and an **in-memory Redis mock**. They demonstrate the caching mechanism's overhead characteristics, not real-world Groq API latency. Run with a live Groq key and real Redis for production-representative numbers.
+
+### LLM Throughput Benchmark (Live — opt-in)
+
+```bash
+# Requires GROQ_API_KEY to be set; exits cleanly without it
+python benchmarks/benchmark_throughput.py --live
+```
+
+By default (no `--live` flag) the script explains what it would measure and exits without fabricating numbers.
+
+### Grounding Evaluation
+
+```bash
+python benchmarks/eval_grounded.py
+```
+
+**Measured result** (2 demo chunks in ChromaDB, 5 test cases):
+
+| Metric | Result |
+|--------|--------|
+| Retrieval coverage | 100% (5/5) |
+| Citations verified | 10/10 |
+| Invalid citation rate | 0.0% |
+
+> These numbers reflect the current 2-chunk demo corpus. They are **not** representative of a full DPDP Act corpus.
+
+### Setup Timing
+
+```bash
+python benchmarks/measure_setup.py
+```
+
+**Measured on this machine** (Windows 11, Python 3.13, cold start):
+
+| Step | Duration |
+|------|---------|
+| Flask + Pydantic import | 632 ms |
+| ChromaDB + SentenceTransformer init | 17 014 ms |
+| Redis CacheService init | 12 516 ms (Redis unavailable, timeout) |
+| Flask app assembly | 11 ms |
+| **Total cold start** | **30.175 s** |
+
+> ChromaDB init time is dominated by loading the `all-MiniLM-L6-v2` model. With a warm model cache and available Redis, startup is faster. These are measured values on specific hardware; your results will vary.
+
+---
+
+## Security Notes
+
+- **JWT secret** must be set via `JWT_SECRET` environment variable; never hardcoded.
+- **Groq API key** must be set via `GROQ_API_KEY`; never committed to source control.
+- Backend authorization is enforced on `/export`, `/recommendations`, and `/report` endpoints.
+- Error responses never expose stack traces, internal paths, or API keys to clients.
+- Redis cache does not store error responses.
+- ChromaDB data is excluded from Git (`.gitignore`).
+
+---
+
+## Implemented vs Future Work
+
+### ✅ Implemented and Tested
+
+| Feature | Implementation |
+|---------|---------------|
+| Pydantic v2 request validation | All 4 Flask endpoints; strict type, length, whitespace checks |
+| Pydantic response validation | LLM output validated before returning to caller |
+| Redis caching | 5-factor cache key; TTL; graceful degradation when Redis unavailable |
+| RAG pipeline | ChromaDB query → context injection → LLM prompt → citation extraction |
+| Citation grounding | Citations derived from retrieved chunk metadata only |
+| Grounding disclaimer | Explicit disclaimer on every response; ungrounded clearly labeled |
+| ChromaDB ingestion | `ingest_documents.py`; repeatable, idempotent upsert |
+| Docker Compose | Health checks; named volumes; Compose service names for inter-service URLs |
+| Backend authorization | JWT-enforced on `/export`, `/recommendations`, `/report` |
+| Async enrichment | `AsyncEnricher` bean fixes self-invocation proxy issue |
+| Environment variable injection | All secrets via env vars; `.env.example` provided |
+| AI service tests | 31 tests; 31 passed; no live API key or Redis required |
+| Backend tests | 7 tests (Maven); 7 passed |
+| Cache latency benchmark | Offline / mocked; measured and saved to JSON artifact |
+| Grounding evaluation harness | 5-case test set; citation verification |
+| Setup timing measurement | Cold-start timing saved to JSON |
+
+### 🔲 Future / Out of Scope
+
+| Feature | Notes |
+|---------|-------|
+| Authoritative DPDP Act corpus | User must supply official documents to `ai-service/documents/` |
+| Frontend containerization | Not in Compose; run with `npm run dev` locally |
+| Live Groq throughput benchmark | Opt-in (`--live` flag) requires real `GROQ_API_KEY` |
+| Redis Sentinel / Cluster | Single-node Redis only |
+| ChromaDB server mode | Embedded ChromaDB only; not suitable for high-concurrency production |
+| Rate limiting | No per-user API rate limiting implemented |
+| Audit logging | No DPDP-specific audit trail beyond PostgreSQL records |
+
+---
+
+## Project Structure
+
+```
+dpdp_Gravity/
+├── ai-service/
+│   ├── app.py                    # Flask app factory; exposes get_chroma(), get_cache_service()
+│   ├── schemas.py                # Pydantic v2 request/response models for all endpoints
+│   ├── ingest_documents.py       # Document ingestion CLI
+│   ├── requirements.txt          # Python dependencies (incl. pydantic>=2.5.0)
+│   ├── documents/                # Place your .txt/.md source files here (not committed)
+│   ├── chroma_data/              # ChromaDB persistence (not committed)
+│   ├── prompts/
+│   │   ├── describe_prompt.txt   # {user_input} + {context_block} placeholders
+│   │   ├── recommend_prompt.txt
+│   │   ├── generate_report_prompt.txt
+│   │   └── categorise_prompt.txt
+│   ├── routes/
+│   │   ├── describe.py           # RAG + Pydantic + Redis
+│   │   ├── categorise.py         # RAG + Pydantic + Redis
+│   │   ├── recommend.py          # RAG + Pydantic + Redis
+│   │   └── generate_report.py    # RAG + Pydantic + Redis
+│   ├── services/
+│   │   ├── chroma_client.py      # ChromaDB wrapper; ingest, query, corpus version
+│   │   ├── rag_service.py        # RAG orchestration; citation extraction
+│   │   ├── cache_service.py      # Redis CacheService; compute_cache_key()
+│   │   └── groq_client.py        # Groq API wrapper
+│   └── tests/
+│       └── test_app.py           # 31 tests (all external services mocked)
+├── dpdp/                         # Spring Boot backend (Java 21)
+│   └── src/main/java/com/campuspe/dpdp/
+│       ├── controller/ComplianceController.java
+│       ├── service/ComplianceService.java
+│       ├── service/AsyncEnricher.java
+│       └── client/AiServiceClient.java
+├── frontend/                     # React 18 + Vite (not containerized)
+├── benchmarks/
+│   ├── benchmark_cache.py        # Cache latency benchmark (offline/mocked)
+│   ├── benchmark_throughput.py   # Groq throughput (opt-in live mode)
+│   ├── eval_grounded.py          # Grounding evaluation harness
+│   └── measure_setup.py          # Cold-start timing measurement
+├── docker-compose.yml            # Postgres + Redis + AI service + Backend
+├── .env.example                  # Safe placeholder env file
+└── README.md
+```

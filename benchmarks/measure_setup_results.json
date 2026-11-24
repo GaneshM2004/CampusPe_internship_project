@@ -1,0 +1,29 @@
+{
+  "timestamp": "2026-11-14T09:13:54.948218+00:00",
+  "environment": {
+    "os": "Windows-11-10.0.26200-SP0",
+    "python": "3.13.5"
+  },
+  "total_startup_seconds": 30.175,
+  "milestones": [
+    {
+      "step": "Core web & validation imports (Flask, Pydantic)",
+      "duration_ms": 631.76
+    },
+    {
+      "step": "ChromaDB & SentenceTransformer init",
+      "duration_ms": 17014.5,
+      "docs_loaded": 2
+    },
+    {
+      "step": "Redis CacheService init",
+      "duration_ms": 12515.57,
+      "redis_status": "Unavailable (fallback active)"
+    },
+    {
+      "step": "Flask app assembly & health check",
+      "duration_ms": 10.82,
+      "health_status": 200
+    }
+  ]
+}

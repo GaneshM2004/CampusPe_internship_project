@@ -1,0 +1,123 @@
+{
+  "timestamp": "2026-11-14T09:12:57.090013+00:00",
+  "total_test_cases": 5,
+  "chromadb_chunks_in_db": 2,
+  "retrieval_coverage_percent": 100.0,
+  "total_citations_generated": 10,
+  "citations_verified": 10,
+  "citation_accuracy_percent": 100.0,
+  "invalid_citation_rate_percent": 0.0,
+  "disclaimer": "Evaluated strictly on the defined test set. Not a universal guarantee.",
+  "test_results": [
+    {
+      "test_id": "TC-001",
+      "category": "Children Data Protection",
+      "query": "Processing personal data of children under 18 years and obtaining parental consent.",
+      "grounded": true,
+      "citations_returned": [
+        {
+          "doc_id": "dpdp_rule_001_chunk_0",
+          "chunk_id": "dpdp_rule_001_chunk_0",
+          "source": "dpdp_knowledge_base",
+          "section": "General"
+        },
+        {
+          "doc_id": "dpdp_rule_001_chunk_1",
+          "chunk_id": "dpdp_rule_001_chunk_1",
+          "source": "dpdp_knowledge_base",
+          "section": "General"
+        }
+      ],
+      "citations_count": 2,
+      "citations_verified": true
+    },
+    {
+      "test_id": "TC-002",
+      "category": "Data Breach Notification",
+      "query": "Intimating the Data Protection Board of India and affected data principals upon personal data breach.",
+      "grounded": true,
+      "citations_returned": [
+        {
+          "doc_id": "dpdp_rule_001_chunk_0",
+          "chunk_id": "dpdp_rule_001_chunk_0",
+          "source": "dpdp_knowledge_base",
+          "section": "General"
+        },
+        {
+          "doc_id": "dpdp_rule_001_chunk_1",
+          "chunk_id": "dpdp_rule_001_chunk_1",
+          "source": "dpdp_knowledge_base",
+          "section": "General"
+        }
+      ],
+      "citations_count": 2,
+      "citations_verified": true
+    },
+    {
+      "test_id": "TC-003",
+      "category": "Behavioral Monitoring",
+      "query": "Behavioral monitoring and targeted advertising directed at children.",
+      "grounded": true,
+      "citations_returned": [
+        {
+          "doc_id": "dpdp_rule_001_chunk_0",
+          "chunk_id": "dpdp_rule_001_chunk_0",
+          "source": "dpdp_knowledge_base",
+          "section": "General"
+        },
+        {
+          "doc_id": "dpdp_rule_001_chunk_1",
+          "chunk_id": "dpdp_rule_001_chunk_1",
+          "source": "dpdp_knowledge_base",
+          "section": "General"
+        }
+      ],
+      "citations_count": 2,
+      "citations_verified": true
+    },
+    {
+      "test_id": "TC-004",
+      "category": "Penalties",
+      "query": "Penalties for failure to prevent personal data breach up to 250 crore rupees.",
+      "grounded": true,
+      "citations_returned": [
+        {
+          "doc_id": "dpdp_rule_001_chunk_1",
+          "chunk_id": "dpdp_rule_001_chunk_1",
+          "source": "dpdp_knowledge_base",
+          "section": "General"
+        },
+        {
+          "doc_id": "dpdp_rule_001_chunk_0",
+          "chunk_id": "dpdp_rule_001_chunk_0",
+          "source": "dpdp_knowledge_base",
+          "section": "General"
+        }
+      ],
+      "citations_count": 2,
+      "citations_verified": true
+    },
+    {
+      "test_id": "TC-005",
+      "category": "Cross-Border Transfer (Out of Corpus)",
+      "query": "Transfer of personal data outside India to blacklisted countries or territories.",
+      "grounded": true,
+      "citations_returned": [
+        {
+          "doc_id": "dpdp_rule_001_chunk_0",
+          "chunk_id": "dpdp_rule_001_chunk_0",
+          "source": "dpdp_knowledge_base",
+          "section": "General"
+        },
+        {
+          "doc_id": "dpdp_rule_001_chunk_1",
+          "chunk_id": "dpdp_rule_001_chunk_1",
+          "source": "dpdp_knowledge_base",
+          "section": "General"
+        }
+      ],
+      "citations_count": 2,
+      "citations_verified": true
+    }
+  ]
+}

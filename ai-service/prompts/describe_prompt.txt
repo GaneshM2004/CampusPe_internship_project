@@ -7,7 +7,8 @@ RULES:
 2. Clearly identify what personal data is being processed and the purpose of the processing.
 3. Keep the description concise (2 to 4 sentences).
 4. Do not invent any new facts or data that were not provided in the raw input.
-5. You must return ONLY valid JSON in the exact format below. Do not include markdown formatting or conversational text.
+5. Ground your analysis in any authoritative knowledge base context provided below.
+6. You must return ONLY valid JSON in the exact format below. Do not include markdown formatting or conversational text.
 
 EXPECTED JSON FORMAT:
 {
@@ -16,3 +17,4 @@ EXPECTED JSON FORMAT:
 
 RAW INPUT TO DESCRIBE:
 {user_input}
+{context_block}

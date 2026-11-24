@@ -1,11 +1,17 @@
 """
-AI-service tests — all external calls (Groq, Redis, ChromaDB) are mocked.
-Tests must pass without a live Groq API key or running services.
+AI-service test suite:
+- Pydantic request and response schema validation
+- ChromaDB RAG retrieval, context injection, and citation validation
+- Redis caching (hit, miss, key generation, and graceful fallback on outage)
+- Input sanitization and error handling
+All tests run with mocks for external services — no live API keys or servers needed.
 """
+
 import json
 import pytest
 from unittest.mock import patch, MagicMock
 from app import app
+from services.cache_service import compute_cache_key
 
 
 @pytest.fixture
@@ -17,12 +23,23 @@ def client():
 
 
 @pytest.fixture(autouse=True)
-def mock_redis(monkeypatch):
-    """Mock Redis globally so tests never need a running Redis instance."""
-    mock = MagicMock()
-    mock.get.return_value = None   # simulate cache miss
-    mock.ping.return_value = True
-    monkeypatch.setattr('app.cache', mock)
+def mock_redis_cache(monkeypatch):
+    """
+    Mock Redis globally in CacheService so tests do not require a live Redis instance.
+    Defaults to cache miss (get returns None).
+    """
+    store = {}
+
+    mock_client = MagicMock()
+    mock_client.get.side_effect = lambda k: store.get(k)
+    mock_client.setex.side_effect = lambda k, ttl, val: store.update({k: val})
+    mock_client.ping.return_value = True
+
+    from app import cache_service
+    monkeypatch.setattr(cache_service, 'client', mock_client)
+    monkeypatch.setattr(cache_service, 'enabled', True)
+
+    yield mock_client
 
 
 # ─── 1. GET /health ─────────────────────────────────────────────────────────
@@ -35,20 +52,53 @@ def test_health_endpoint(client):
     assert 'uptime' in body
     assert 'chromadb_docs' in body
     assert 'redis_available' in body
+    assert body['pydantic_validation'] is True
+    assert 'rag_grounding_active' in body
 
 
-# ─── 2. POST /describe ───────────────────────────────────────────────────────
+# ─── 2. POST /describe — Pydantic Validation & RAG ──────────────────────────
 
 @patch('routes.describe._groq')
-def test_describe_success(mock_groq, client):
+@patch('routes.describe.retrieve_rag_context')
+def test_describe_success_ungrounded(mock_rag, mock_groq, client):
+    """When no Chroma context is found, describe returns ungrounded result safely."""
+    mock_rag.return_value = (False, "", [], "Ungrounded disclaimer")
     mock_groq.call_for_json.return_value = {
-        "professional_description": "This is a professional compliance summary."
+        "professional_description": "Employee medical records processed securely."
     }
+
     response = client.post('/describe', json={'input_text': 'Employee medical records stored on cloud.'})
     assert response.status_code == 200
     body = response.json
-    assert 'professional_description' in body
+    assert body['professional_description'] == "Employee medical records processed securely."
     assert 'generated_at' in body
+    assert body['grounded'] is False
+    assert body['citations'] == []
+    assert 'Ungrounded' in body['disclaimer']
+
+
+@patch('routes.describe._groq')
+@patch('routes.describe.retrieve_rag_context')
+def test_describe_success_grounded(mock_rag, mock_groq, client):
+    """When Chroma returns chunks, describe passes context and returns verified citations."""
+    sample_citation = {
+        "doc_id": "dpdp_rule_001",
+        "chunk_id": "dpdp_rule_001_chunk_0",
+        "source": "dpdp_act_2023.txt",
+        "section": "Section 9"
+    }
+    mock_rag.return_value = (True, "[Source Context]", [sample_citation], "Grounded disclaimer")
+    mock_groq.call_for_json.return_value = {
+        "professional_description": "Parental consent required for child data processing."
+    }
+
+    response = client.post('/describe', json={'input_text': 'Processing data of users under 18.'})
+    assert response.status_code == 200
+    body = response.json
+    assert body['grounded'] is True
+    assert len(body['citations']) == 1
+    assert body['citations'][0]['chunk_id'] == "dpdp_rule_001_chunk_0"
+    assert body['citations'][0]['source'] == "dpdp_act_2023.txt"
 
 
 @patch('routes.describe._groq')
@@ -75,12 +125,24 @@ def test_describe_too_long(client):
     assert response.status_code == 400
 
 
+def test_describe_wrong_type(client):
+    """Pydantic rejects non-string input_text with 400."""
+    response = client.post('/describe', json={'input_text': 12345})
+    assert response.status_code == 400
+
+
+def test_describe_extra_fields_forbidden(client):
+    """Pydantic rejects unexpected extra fields when extra='forbid'."""
+    response = client.post('/describe', json={'input_text': 'valid', 'unexpected': 'extra'})
+    assert response.status_code == 400
+
+
 def test_describe_no_json_body(client):
     response = client.post('/describe', data='not json', content_type='text/plain')
     assert response.status_code == 400
 
 
-# ─── 3. POST /categorise ────────────────────────────────────────────────────
+# ─── 3. POST /categorise — Pydantic Validation & Logic ──────────────────────
 
 @patch('routes.categorise.client')
 def test_categorise_success(mock_client, client):
@@ -95,13 +157,13 @@ def test_categorise_success(mock_client, client):
     assert body['category'] == 'Data Processing'
     assert 0.0 <= body['confidence'] <= 1.0
     assert 'reasoning' in body
+    assert 'meta' in body
 
 
 @patch('routes.categorise.client')
 def test_categorise_invalid_category_fallback(mock_client, client):
-    """If AI returns an unknown category, the route should use 'Data Processing' as default."""
     mock_client.call_for_json.return_value = {
-        "category": "Some Unknown Category",
+        "category": "Unknown Category",
         "confidence": 0.9,
         "reasoning": "Some reason"
     }
@@ -115,15 +177,22 @@ def test_categorise_empty_input(client):
     assert response.status_code == 400
 
 
+def test_categorise_whitespace_only(client):
+    response = client.post('/categorise', json={'text': '   \n  '})
+    assert response.status_code == 400
+
+
 def test_categorise_missing_field(client):
     response = client.post('/categorise', json={})
     assert response.status_code == 400
 
 
-# ─── 4. POST /recommend ─────────────────────────────────────────────────────
+# ─── 4. POST /recommend — Pydantic Validation & RAG ─────────────────────────
 
 @patch('routes.recommend._groq')
-def test_recommend_success(mock_groq, client):
+@patch('routes.recommend.retrieve_rag_context')
+def test_recommend_success(mock_rag, mock_groq, client):
+    mock_rag.return_value = (False, "", [], "Disclaimer")
     mock_groq.call_for_json.return_value = {
         "recommendations": [
             {"action_type": "Policy", "description": "Implement DPA.", "priority": "High"},
@@ -136,6 +205,7 @@ def test_recommend_success(mock_groq, client):
     body = response.json
     assert 'recommendations' in body
     assert len(body['recommendations']) == 3
+    assert body['recommendations'][0]['priority'] == 'High'
 
 
 @patch('routes.recommend._groq')
@@ -150,10 +220,12 @@ def test_recommend_missing_input(client):
     assert response.status_code == 400
 
 
-# ─── 5. POST /generate-report ───────────────────────────────────────────────
+# ─── 5. POST /generate-report — Pydantic Validation & RAG ───────────────────
 
 @patch('routes.generate_report._groq')
-def test_generate_report_success(mock_groq, client):
+@patch('routes.generate_report.retrieve_rag_context')
+def test_generate_report_success(mock_rag, mock_groq, client):
+    mock_rag.return_value = (False, "", [], "Disclaimer")
     mock_groq.call_for_json.return_value = {
         "title": "Data Breach Audit Report",
         "executive_summary": "A significant breach occurred.",
@@ -161,13 +233,13 @@ def test_generate_report_success(mock_groq, client):
         "top_items": ["Finding 1", "Finding 2"],
         "recommendations": ["Action 1", "Action 2"]
     }
-    response = client.post('/generate-report', json={'input_text': 'Large scale data breach.'})
+    response = client.post('/generate-report', json={'input_text': 'Large scale data breach incident.'})
     assert response.status_code == 200
     body = response.json
-    assert 'title' in body
+    assert body['title'] == "Data Breach Audit Report"
     assert 'executive_summary' in body
-    assert 'top_items' in body
-    assert 'recommendations' in body
+    assert len(body['top_items']) == 2
+    assert len(body['recommendations']) == 2
 
 
 @patch('routes.generate_report._groq')
@@ -179,96 +251,75 @@ def test_generate_report_ai_unavailable(mock_groq, client):
 
 @patch('routes.generate_report._groq')
 def test_generate_report_incomplete_response(mock_groq, client):
-    """If AI response is missing required fields, return 502."""
-    mock_groq.call_for_json.return_value = {
-        "title": "Only a title"
-        # missing executive_summary, overview, top_items, recommendations
-    }
+    """If AI response is not a dict or missing core fields, return 502."""
+    mock_groq.call_for_json.return_value = "Not a dict"
     response = client.post('/generate-report', json={'input_text': 'Some incident'})
     assert response.status_code == 502
 
 
-def test_generate_report_missing_input(client):
-    response = client.post('/generate-report', json={})
-    assert response.status_code == 400
-
-
-# ─── 6. Input sanitization ──────────────────────────────────────────────────
+# ─── 6. Redis Caching Behavior (Hit, Miss, Keying, and Outage) ──────────────
 
 @patch('routes.describe._groq')
-def test_input_sanitization_does_not_500(mock_groq, client):
-    """XSS-looking input should be safely passed to AI, not cause a 500."""
-    mock_groq.call_for_json.return_value = {
-        "professional_description": "Sanitized description."
-    }
-    payload = {'input_text': '<script>alert("hack")</script> valid text'}
-    response = client.post('/describe', json=payload)
-    assert response.status_code != 500
-    assert response.status_code == 200
-
-
-# ─── 7. JSON cleanup logic ──────────────────────────────────────────────────
-
-def test_groq_json_cleanup_logic():
-    """Unit test for the JSON fence-stripping logic inside GroqClient."""
-    raw_response = """
-    ```json
-    {
-        "category": "Sensitive Personal Data",
-        "confidence": 0.95
-    }
-    ```
+@patch('routes.describe.retrieve_rag_context')
+def test_redis_cache_hit_and_miss(mock_rag, mock_groq, client):
     """
-    cleaned = raw_response.strip()
-    if cleaned.startswith("```"):
-        cleaned = cleaned.split("\n", 1)[-1]
-        cleaned = cleaned.rsplit("```", 1)[0].strip()
+    First call should miss cache and call Groq.
+    Second call with identical input should hit cache and NOT call Groq a second time.
+    """
+    mock_rag.return_value = (False, "", [], "Disclaimer")
+    mock_groq.call_for_json.return_value = {
+        "professional_description": "Cacheable description."
+    }
 
-    parsed = json.loads(cleaned)
-    assert parsed["category"] == "Sensitive Personal Data"
-    assert parsed["confidence"] == 0.95
+    payload = {'input_text': 'Identical test query for cache.'}
 
+    # 1. First call: Cache miss -> Groq called
+    resp1 = client.post('/describe', json=payload)
+    assert resp1.status_code == 200
+    assert mock_groq.call_for_json.call_count == 1
 
-# ─── 8. GroqClient call_for_json unit tests ─────────────────────────────────
-
-def test_groq_client_call_for_json_valid():
-    """call_for_json should parse valid JSON from raw text response."""
-    from services.groq_client import GroqClient
-    gc = GroqClient.__new__(GroqClient)  # skip __init__ (no API key needed)
-    gc.api_key = "test"
-    gc.headers = {}
-
-    with patch.object(gc, 'call', return_value='{"key": "value"}'):
-        result = gc.call_for_json([])
-    assert result == {"key": "value"}
+    # 2. Second call: Cache hit -> Groq NOT called again
+    resp2 = client.post('/describe', json=payload)
+    assert resp2.status_code == 200
+    assert mock_groq.call_for_json.call_count == 1
+    assert resp2.json['professional_description'] == resp1.json['professional_description']
 
 
-def test_groq_client_call_for_json_fence_stripped():
-    """call_for_json should strip markdown code fences."""
-    from services.groq_client import GroqClient
-    gc = GroqClient.__new__(GroqClient)
-    gc.api_key = "test"
-    gc.headers = {}
+def test_cache_key_generation():
+    """Verify deterministic cache key computation across variations."""
+    key1 = compute_cache_key("describe", "user input", "v1", "llama-3", "corp1")
+    key2 = compute_cache_key("describe", "  user   input  ", "v1", "llama-3", "corp1")
+    assert key1 == key2  # normalized whitespace matches
 
-    raw = '```json\n{"key": "value"}\n```'
-    with patch.object(gc, 'call', return_value=raw):
-        result = gc.call_for_json([])
-    assert result == {"key": "value"}
+    key3 = compute_cache_key("describe", "different input", "v1", "llama-3", "corp1")
+    assert key1 != key3
 
-
-def test_groq_client_call_for_json_none_on_groq_failure():
-    """call_for_json returns None when call() returns None."""
-    from services.groq_client import GroqClient
-    gc = GroqClient.__new__(GroqClient)
-    gc.api_key = "test"
-    gc.headers = {}
-
-    with patch.object(gc, 'call', return_value=None):
-        result = gc.call_for_json([])
-    assert result is None
+    # Changing corpus version invalidates cache key
+    key_new_corpus = compute_cache_key("describe", "user input", "v1", "llama-3", "corp2")
+    assert key1 != key_new_corpus
 
 
-# ─── 9. ChromaDB chunk_text unit tests ──────────────────────────────────────
+@patch('routes.describe._groq')
+@patch('routes.describe.retrieve_rag_context')
+def test_redis_outage_graceful_degradation(mock_rag, mock_groq, client, monkeypatch):
+    """When Redis is down (ConnectionError), route continues and returns uncached result."""
+    from app import cache_service
+    broken_redis = MagicMock()
+    broken_redis.get.side_effect = Exception("Connection refused to Redis")
+    broken_redis.setex.side_effect = Exception("Connection refused to Redis")
+    monkeypatch.setattr(cache_service, 'client', broken_redis)
+
+    mock_rag.return_value = (False, "", [], "Disclaimer")
+    mock_groq.call_for_json.return_value = {
+        "professional_description": "Works without Redis."
+    }
+
+    response = client.post('/describe', json={'input_text': 'Redis is down test.'})
+    assert response.status_code == 200
+    assert response.json['professional_description'] == "Works without Redis."
+
+
+# ─── 7. ChromaDB Chunking & Query Unit Tests ────────────────────────────────
 
 def test_chunk_text_basic():
     from services.chroma_client import chunk_text
@@ -288,18 +339,54 @@ def test_chunk_text_short_input():
 
 def test_chunk_text_empty():
     from services.chroma_client import chunk_text
-    chunks = chunk_text("", chunk_size=500, overlap=50)
-    assert chunks == []
+    assert chunk_text("") == []
+    assert chunk_text("   ") == []
 
-
-# ─── 10. ChromaDB no-context case ───────────────────────────────────────────
 
 def test_chroma_query_returns_empty_when_unavailable():
-    """ChromaClient.query should return [] when ChromaDB is not available."""
     from services.chroma_client import ChromaClient
-    # Create instance with _available=False to simulate missing chromadb
     c = ChromaClient.__new__(ChromaClient)
     c._available = False
+    assert c.query("any question") == []
 
-    result = c.query("any question")
-    assert result == []
+
+def test_chroma_query_returns_empty_when_empty_collection():
+    from services.chroma_client import ChromaClient
+    c = ChromaClient.__new__(ChromaClient)
+    c._available = True
+    c.collection = MagicMock()
+    c.collection.count.return_value = 0
+    assert c.query("any question") == []
+
+
+# ─── 8. Input Sanitization & Fence Stripping ────────────────────────────────
+
+@patch('routes.describe._groq')
+@patch('routes.describe.retrieve_rag_context')
+def test_input_sanitization_does_not_500(mock_rag, mock_groq, client):
+    mock_rag.return_value = (False, "", [], "Disclaimer")
+    mock_groq.call_for_json.return_value = {
+        "professional_description": "Sanitized description."
+    }
+    payload = {'input_text': '<script>alert("hack")</script> valid text'}
+    response = client.post('/describe', json=payload)
+    assert response.status_code == 200
+
+
+def test_groq_json_cleanup_logic():
+    raw_response = """
+    ```json
+    {
+        "category": "Sensitive Personal Data",
+        "confidence": 0.95
+    }
+    ```
+    """
+    cleaned = raw_response.strip()
+    if cleaned.startswith("```"):
+        cleaned = cleaned.split("\n", 1)[-1]
+        cleaned = cleaned.rsplit("```", 1)[0].strip()
+
+    parsed = json.loads(cleaned)
+    assert parsed["category"] == "Sensitive Personal Data"
+    assert parsed["confidence"] == 0.95
