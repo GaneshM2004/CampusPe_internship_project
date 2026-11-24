@@ -46,6 +46,12 @@ class _FakeCollection:
     def upsert(self, **kwargs):
         pass
 
+    def delete(self, **kwargs):
+        pass
+
+    def get(self, **kwargs):
+        return {"ids": [], "documents": [], "metadatas": []}
+
     def query(self, **kwargs):
         return {
             "ids": [[]],
@@ -191,16 +197,97 @@ class ChromaClient:
             logger.error(f"ChromaDB query error: {e}")
             return []
 
+    def ingest_chunks(self, chunks: list[dict], batch_size: int = 64) -> int:
+        """
+        Ingests pre-constructed chunk dicts:
+        each dict must have 'id', 'document', and 'metadata'.
+        Uses upsert with batching.
+        """
+        if not self._available or not chunks:
+            return 0
+
+        total_ingested = 0
+        for i in range(0, len(chunks), batch_size):
+            batch = chunks[i:i + batch_size]
+            batch_docs = [c["document"] for c in batch]
+            batch_ids = [c["id"] for c in batch]
+            batch_metas = [c["metadata"] for c in batch]
+
+            try:
+                batch_embeddings = self.model.encode(batch_docs).tolist()
+                self.collection.upsert(
+                    documents=batch_docs,
+                    embeddings=batch_embeddings,
+                    metadatas=batch_metas,
+                    ids=batch_ids
+                )
+                total_ingested += len(batch)
+            except Exception as e:
+                logger.error(f"ChromaDB batch ingest error at offset {i} (batch size {len(batch)}): {e}")
+
+        logger.info(f"Successfully ingested {total_ingested} chunks.")
+        return total_ingested
+
+    def delete_document(self, doc_id: str) -> int:
+        """
+        Deletes all chunks belonging to doc_id.
+        Returns number of deleted chunks if detectable.
+        """
+        if not self._available:
+            return 0
+        try:
+            self.collection.delete(where={"doc_id": doc_id})
+            logger.info(f"Deleted existing chunks for doc_id: '{doc_id}'")
+            return 1
+        except Exception as e:
+            logger.warning(f"delete_document error for '{doc_id}' (attempting fallback): {e}")
+            try:
+                res = self.collection.get()
+                ids_to_del = [cid for cid in res.get("ids", []) if cid.startswith(f"{doc_id}_")]
+                if ids_to_del:
+                    self.collection.delete(ids=ids_to_del)
+                    return len(ids_to_del)
+            except Exception as e2:
+                logger.error(f"Fallback delete failed for '{doc_id}': {e2}")
+            return 0
+
+    def reset_collection(self):
+        """Resets the collection, clearing all existing chunks."""
+        if not self._available:
+            return
+        try:
+            self.client.delete_collection("dpdp_compliance_docs")
+            self.collection = self.client.get_or_create_collection(
+                name="dpdp_compliance_docs",
+                metadata={"hnsw:space": "cosine"}
+            )
+            logger.info("ChromaDB collection 'dpdp_compliance_docs' reset.")
+        except Exception as e:
+            logger.error(f"Failed to reset collection: {e}")
+
     def get_corpus_version(self) -> str:
         """
         Returns a deterministic version string for the current Chroma collection
-        so that Redis caching can accurately invalidate when the corpus changes.
+        based on corpus manifest content hash so that Redis caching accurately
+        invalidates whenever documents, manifest, or chunk count change.
         """
         if not self._available:
             return "unavailable"
         count = self.collection.count()
         if count == 0:
             return "empty"
+
+        # Check for documents/corpus_manifest.json
+        base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        manifest_path = os.path.join(base_dir, "documents", "corpus_manifest.json")
+        if os.path.isfile(manifest_path):
+            try:
+                with open(manifest_path, "rb") as f:
+                    m_hash = hashlib.sha256(f.read()).hexdigest()[:16]
+                return f"v_manifest_{m_hash}_c{count}"
+            except Exception:
+                pass
+
         return f"v_count_{count}"
 
     def count(self) -> int:

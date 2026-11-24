@@ -18,7 +18,8 @@ def compute_cache_key(
     input_text: str,
     prompt_version: str,
     model_id: str,
-    corpus_version: str
+    corpus_version: str,
+    rag_settings: Optional[dict] = None
 ) -> str:
     """
     Computes a deterministic, collision-resistant cache key factoring in:
@@ -26,10 +27,14 @@ def compute_cache_key(
     2. Normalized input text (stripped, normalized whitespace)
     3. Prompt / template version hash
     4. Model identifier (e.g. llama-3.3-70b-versatile)
-    5. Knowledge-base / corpus version (so changes in Chroma invalidate cache)
+    5. Knowledge-base / corpus version (manifest/content hash so changes invalidate cache)
+    6. Active RAG settings affecting output (top_k, max_distance, require_grounding)
     """
     normalized_input = " ".join(input_text.strip().split())
-    composite = f"{endpoint}|{normalized_input}|{prompt_version}|{model_id}|{corpus_version}"
+    rag_str = ""
+    if rag_settings:
+        rag_str = "|rag:" + ",".join(f"{k}={v}" for k, v in sorted(rag_settings.items()))
+    composite = f"{endpoint}|{normalized_input}|{prompt_version}|{model_id}|{corpus_version}{rag_str}"
     digest = hashlib.sha256(composite.encode("utf-8")).hexdigest()
     return f"dpdp_cache:{endpoint}:{digest}"
 

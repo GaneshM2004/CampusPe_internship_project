@@ -1,0 +1,41 @@
+{
+  "corpus_version": "2025-11-24",
+  "documents_manifest_hash": "a5e01ef06bc75c87e7488f2195f03d5c9e4c19416a241cb0fba4bfba7d4cbe20",
+  "disclaimer": "Informational assistance only. Documents are local PDF copies. Official provenance is unverified without certified URL or direct authority confirmation.",
+  "documents": [
+    {
+      "doc_id": "dpdp_act_2023",
+      "filename": "DPDP_ACT_2023.pdf",
+      "file_type": "pdf",
+      "title": "The Digital Personal Data Protection Act, 2023",
+      "issuing_authority": "Parliament of India / Ministry of Law and Justice",
+      "official_url": null,
+      "publication_date": "2023-08-11",
+      "notification_or_gazette_number": "Act No. 22 of 2023; Gazette of India Extraordinary, Part II, Section 1",
+      "effective_date": null,
+      "sha256": "4deb23981d3010c8225a2ff6149e7243dc2268455b299e283afebdd7b72a7d15",
+      "page_count": 21,
+      "extraction_status": "success",
+      "extraction_method": "pypdf_digital_text",
+      "source_authority_status": "unverified_local_file",
+      "section_extraction_status": "sections_and_chapters_detected"
+    },
+    {
+      "doc_id": "dpdp_rules_2025",
+      "filename": "DPDP_Rules_2025_English_only.pdf",
+      "file_type": "pdf",
+      "title": "Digital Personal Data Protection Rules, 2025",
+      "issuing_authority": "Ministry of Electronics and Information Technology (MeitY)",
+      "official_url": null,
+      "publication_date": "2025-11-13",
+      "notification_or_gazette_number": "G.S.R. 846(E); Gazette of India Extraordinary, Part II, Section 3(i)",
+      "effective_date": null,
+      "sha256": "63bc7ca508ae4ebbbbf8731d336914d94ee6067e918b719d019193371fcc0763",
+      "page_count": 18,
+      "extraction_status": "success",
+      "extraction_method": "pypdf_digital_text",
+      "source_authority_status": "unverified_local_file",
+      "section_extraction_status": "rules_and_schedules_detected"
+    }
+  ]
+}

@@ -47,9 +47,14 @@ def recommend():
 
     corpus_ver = chroma.get_corpus_version() if chroma else "none"
     prompt_ver = _get_prompt_version()
+    rag_settings = {
+        "top_k": int(os.environ.get("CHROMA_TOP_K", "3")),
+        "max_dist": os.environ.get("CHROMA_MAX_DISTANCE", "none"),
+        "req_ground": os.environ.get("REQUIRE_GROUNDING", "false").lower()
+    }
 
     # 2. Redis Cache Lookup
-    cache_key = compute_cache_key("recommend", req.input_text, prompt_ver, MODEL_ID, corpus_ver)
+    cache_key = compute_cache_key("recommend", req.input_text, prompt_ver, MODEL_ID, corpus_ver, rag_settings)
     cached_result = cache_svc.get(cache_key)
     if cached_result is not None:
         return jsonify(cached_result), 200

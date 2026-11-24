@@ -91,8 +91,8 @@ def run_grounding_evaluation():
     valid_chunk_ids = set()
     if getattr(chroma, "_available", False) and doc_count > 0:
         try:
-            peek_data = chroma.collection.peek(limit=doc_count)
-            valid_chunk_ids = set(peek_data.get("ids", []))
+            get_data = chroma.collection.get(include=[])
+            valid_chunk_ids = set(get_data.get("ids", []))
         except Exception:
             pass
 

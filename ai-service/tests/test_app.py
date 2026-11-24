@@ -390,3 +390,115 @@ def test_groq_json_cleanup_logic():
     parsed = json.loads(cleaned)
     assert parsed["category"] == "Sensitive Personal Data"
     assert parsed["confidence"] == 0.95
+
+
+# ─── 9. PDF Extraction, Manifest & Idempotent Ingestion Tests ──────────────
+
+def test_chunk_page_text_paragraph_split():
+    from ingest_documents import chunk_page_text
+    text = "Paragraph one is here.\n\nParagraph two is here.\n\nParagraph three is here."
+    chunks = chunk_page_text(text, max_chars=50, overlap=10)
+    assert len(chunks) >= 2
+    assert "Paragraph one" in chunks[0]
+
+
+def test_chunk_page_text_empty():
+    from ingest_documents import chunk_page_text
+    assert chunk_page_text("") == []
+    assert chunk_page_text("   \n\n  ") == []
+
+
+def test_load_manifest_returns_documents():
+    from ingest_documents import load_manifest
+    manifest = load_manifest()
+    assert "documents" in manifest
+    assert len(manifest["documents"]) >= 2
+    filenames = [doc["filename"] for doc in manifest["documents"]]
+    assert "DPDP_ACT_2023.pdf" in filenames
+    assert "DPDP_Rules_2025_English_only.pdf" in filenames
+
+
+def test_manifest_corpus_versioning():
+    from services.chroma_client import ChromaClient
+    c = ChromaClient.__new__(ChromaClient)
+    c._available = True
+    c.collection = MagicMock()
+    c.collection.count.return_value = 232
+    ver = c.get_corpus_version()
+    assert "v_manifest_" in ver
+    assert ver.endswith("_c232")
+
+
+def test_cache_key_invalidates_on_rag_settings():
+    from services.cache_service import compute_cache_key
+    key1 = compute_cache_key("describe", "test input", "v1", "llama-3.3-70b-versatile", "v_manifest_1_c100", {"top_k": 3})
+    key2 = compute_cache_key("describe", "test input", "v1", "llama-3.3-70b-versatile", "v_manifest_1_c100", {"top_k": 5})
+    key3 = compute_cache_key("describe", "test input", "v1", "llama-3.3-70b-versatile", "v_manifest_2_c100", {"top_k": 3})
+    assert key1 != key2
+    assert key1 != key3
+
+
+def test_extract_pdf_encrypted_fails_safely():
+    from ingest_documents import extract_pdf_document
+    mock_reader = MagicMock()
+    mock_reader.is_encrypted = True
+    with patch('ingest_documents.PdfReader', return_value=mock_reader), \
+         patch('ingest_documents.compute_file_sha256', return_value='fakehash'):
+        with pytest.raises(ValueError, match="encrypted"):
+            extract_pdf_document("dummy.pdf", "dummy_doc", "Dummy Title")
+
+
+def test_extract_pdf_image_only_detects_empty_pages():
+    from ingest_documents import extract_pdf_document
+    mock_page1 = MagicMock()
+    mock_page1.extract_text.return_value = ""  # Scanned image with no OCR
+    mock_page2 = MagicMock()
+    mock_page2.extract_text.return_value = "   "
+    mock_reader = MagicMock()
+    mock_reader.is_encrypted = False
+    mock_reader.pages = [mock_page1, mock_page2]
+
+    with patch('ingest_documents.PdfReader', return_value=mock_reader), \
+         patch('ingest_documents.compute_file_sha256', return_value="fakehash"):
+        chunks, stats = extract_pdf_document("scanned.pdf", "scan_doc", "Scanned Doc")
+        assert stats["empty_pages"] == [1, 2]
+        assert stats["total_chars"] == 0
+        assert len(chunks) == 0
+
+
+def test_extract_pdf_clean_text_with_sections():
+    from ingest_documents import extract_pdf_document
+    mock_page1 = MagicMock()
+    mock_page1.extract_text.return_value = (
+        "CHAPTER I\nPRELIMINARY\n\n1. (1) This Act may be called the DPDP Act.\n\n"
+        "2. Definitions.\nIn this Act, personal data means any data..."
+    )
+    mock_reader = MagicMock()
+    mock_reader.is_encrypted = False
+    mock_reader.pages = [mock_page1]
+
+    with patch('ingest_documents.PdfReader', return_value=mock_reader), \
+         patch('ingest_documents.compute_file_sha256', return_value="fakehash"):
+        chunks, stats = extract_pdf_document("test.pdf", "test_act", "Test Act Title")
+        assert stats["total_pages"] == 1
+        assert stats["empty_pages"] == []
+        assert len(chunks) >= 1
+        chunk_meta = chunks[0]["metadata"]
+        assert chunk_meta["doc_id"] == "test_act"
+        assert chunk_meta["page"] == 1
+        assert "section" in chunk_meta
+        assert chunk_meta["chunk_id"].startswith("test_act_p1_c")
+
+
+def test_citation_page_number_propagation(client):
+    from schemas import CitationItem
+    citation = CitationItem(
+        doc_id="dpdp_act_2023",
+        chunk_id="dpdp_act_2023_p5_c1",
+        source="DPDP_ACT_2023.pdf",
+        section="Section 9. Processing of data of children",
+        page=5
+    )
+    dumped = citation.model_dump()
+    assert dumped["page"] == 5
+    assert dumped["chunk_id"] == "dpdp_act_2023_p5_c1"

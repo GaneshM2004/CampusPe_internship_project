@@ -35,6 +35,7 @@ class CitationItem(BaseModel):
     chunk_id: str
     source: str
     section: Optional[str] = "N/A"
+    page: Optional[int] = None
 
 
 # ── POST /describe ───────────────────────────────────────────────────────────

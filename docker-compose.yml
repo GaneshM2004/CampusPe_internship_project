@@ -61,6 +61,8 @@ services:
       # Redis host — must use the Compose service name, NOT localhost
       - REDIS_HOST=redis
       - REDIS_PORT=6379
+      # ChromaDB persistent directory
+      - CHROMA_DATA_DIR=/app/chroma_data
     volumes:
       # Persist ChromaDB data across container restarts
       - chromadata:/app/chroma_data

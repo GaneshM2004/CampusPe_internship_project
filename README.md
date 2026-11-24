@@ -55,31 +55,38 @@ React (Vite)                    Spring Boot (Java 21)         Flask AI Microserv
 
 ---
 
-## RAG Pipeline — Important Limitations
+## RAG Pipeline & Document Corpus
 
 ### Current Knowledge Base State
 
-The ChromaDB instance currently contains **2 demo chunks** loaded automatically from the `ChromaClient.__main__` test block. These chunks contain sample DPDP Act text for testing purposes only.
+The ChromaDB vector store contains **232 chunks** extracted from the official Gazette PDF publications in `ai-service/documents/`:
 
-**They are NOT authoritative source documents.**
+1. **`DPDP_ACT_2023.pdf`** (The Digital Personal Data Protection Act, 2023 — Act No. 22 of 2023):
+   - 21 pages, 63,482 characters, 115 chunks.
+   - Chapters I–IX (Sections 1–44) and the Penalties Schedule.
+2. **`DPDP_Rules_2025_English_only.pdf`** (Digital Personal Data Protection Rules, 2025 — G.S.R. 846(E)):
+   - 18 pages, 63,100 characters, 117 chunks.
+   - Rules 1–23 and First/Second Schedules.
 
-### Supplying Authoritative Documents
+Corpus manifest metadata is tracked in [`ai-service/documents/corpus_manifest.json`](file:///e:/dpdp_Gravity/ai-service/documents/corpus_manifest.json).
 
-You **must supply your own DPDP Act source documents** to enable grounded responses:
+### Ingesting New or Updated Documents
 
-1. Place `.txt` or `.md` files in `ai-service/documents/`.
-2. Use only official government publications or legally reviewed sources.
+The ingestion engine supports `.pdf`, `.txt`, and `.md` files:
+
+1. Place source files in `ai-service/documents/`.
+2. Update metadata in `ai-service/documents/corpus_manifest.json` if applicable.
 3. Run the ingestion script:
    ```bash
    cd ai-service
    python ingest_documents.py
    ```
-4. Verify ingestion:
+4. Verify chunk count and corpus version:
    ```bash
-   python -c "from services.chroma_client import ChromaClient; c = ChromaClient(); print(c.collection.count(), 'chunks')"
+   python -c "from services.chroma_client import ChromaClient; c = ChromaClient(); print(c.collection.count(), 'chunks stored | Version:', c.get_corpus_version())"
    ```
 
-> **Re-ingest after document changes:** Run `python ai-service/ingest_documents.py` whenever you add or update source files. The ingestion uses stable chunk IDs and upserts, so re-running is safe and idempotent.
+> **Idempotent Ingestion:** Re-running `python ai-service/ingest_documents.py` safely replaces changed documents and keeps unchanged chunks intact without duplicate entries. To perform a full wipe and rebuild, pass `--reset`.
 
 ### Grounding Behavior
 
@@ -238,7 +245,7 @@ The ingestion script:
 
 ## Running Tests
 
-### AI Service (Python — 31 tests)
+### AI Service (Python — 40 tests)
 
 ```powershell
 # From the project root on Windows:
@@ -246,13 +253,16 @@ $env:PYTHONPATH="e:\dpdp_Gravity\ai-service"
 python -m pytest ai-service/tests -v
 ```
 
-**Expected output:** `31 passed` (no live API key or Redis required; all external services are mocked)
+**Expected output:** `40 passed` (no live API key or Redis required; all external services are mocked)
 
 Test coverage includes:
-- RAG grounded and ungrounded paths, citation verification
+- RAG grounded and ungrounded paths, citation verification with page numbers
+- PDF discovery, manifest hash verification, section extraction, and image-only PDF detection
+- Safe error handling for encrypted, empty, and corrupt PDFs
+- Idempotent ingestion and stale chunk deletion logic
+- Cache key invalidation upon manifest, corpus hash, prompt, or RAG parameter changes
 - Pydantic validation for all 4 endpoints (empty, whitespace, too long, wrong type, extra fields)
 - Redis cache hit, miss, and outage (graceful degradation)
-- ChromaDB chunking edge cases (empty input, short input, overlap)
 - ChromaDB query when unavailable or collection empty
 - Input sanitization, Groq JSON cleanup logic
 

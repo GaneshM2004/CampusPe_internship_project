@@ -66,17 +66,25 @@ def retrieve_rag_context(
         doc_id = meta.get("doc_id", cid)
         section = meta.get("section", "General")
 
+        page_val = meta.get("page")
+        try:
+            page_num = int(page_val) if page_val is not None else None
+        except (ValueError, TypeError):
+            page_num = None
+
         citation = {
             "doc_id": str(doc_id),
             "chunk_id": str(cid),
             "source": str(source),
-            "section": str(section)
+            "section": str(section),
+            "page": page_num
         }
         citations.append(citation)
 
+        page_label = f" | Page: {page_num}" if page_num is not None else ""
         doc_text = chunk.get("document", "").strip()
         formatted_chunks.append(
-            f"[Source: {source} | Section: {section} | ID: {cid}]\n{doc_text}"
+            f"[Source: {source}{page_label} | Section: {section} | ID: {cid}]\n{doc_text}"
         )
 
     context_block = (
