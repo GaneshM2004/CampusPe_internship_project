@@ -598,3 +598,75 @@ def test_live_routes_invoke_chroma_and_inject_context(client, monkeypatch, endpo
     prompt_sent = sent_messages[0]["content"]
     assert "Verifiable parental consent is required for children under 18." in prompt_sent
     assert "dpdp_act_2023_p8_c4" in prompt_sent
+
+
+@pytest.mark.parametrize("endpoint,payload_key,groq_module,groq_payload", [
+    ("/describe", "input_text", "routes.describe._groq", {"professional_description": "Grounded desc."}),
+    ("/categorise", "text", "routes.categorise.client", {"category": "Consent Management", "confidence": 0.92, "reasoning": "Matches Sec 9."}),
+    ("/recommend", "input_text", "routes.recommend._groq", {"recommendations": [{"action_type": "Legal", "description": "Get consent.", "priority": "High"}]}),
+    ("/generate-report", "input_text", "routes.generate_report._groq", {
+        "title": "Audit",
+        "executive_summary": "Summary",
+        "overview": "Overview",
+        "top_items": ["Item 1"],
+        "recommendations": ["Rec 1"]
+    }),
+])
+def test_all_four_routes_work_with_real_app_and_real_chroma_query(client, monkeypatch, endpoint, payload_key, groq_module, groq_payload):
+    """
+    Exercise all 4 live routes through real app.get_chroma(), real app.get_cache_service(),
+    real retrieve_rag_context(), and real ChromaClient.query(question, top_k=..., max_distance=...)
+    (mocking only collection.query, model.encode, and Groq).
+    Proves zero contract mismatch across routes -> rag_service -> ChromaClient -> schemas.
+    """
+    from app import get_chroma
+    chroma = get_chroma()
+
+    mock_collection = MagicMock()
+    mock_collection.count.return_value = 5
+    mock_collection.query.return_value = {
+        "ids": [["dpdp_act_2023_p8_c4", "irrelevant_far_chunk"]],
+        "documents": [[
+            "Section 9: Verifiable parental consent before processing data of a child.",
+            "Far distant unrelated text."
+        ]],
+        "metadatas": [[
+            {
+                "doc_id": "dpdp_act_2023",
+                "chunk_id": "dpdp_act_2023_p8_c4",
+                "source": "DPDP_ACT_2023.pdf",
+                "section": "Section 9",
+                "page": 8,
+                "file_sha256": "abc123",
+                "text_hash": "def456"
+            },
+            {
+                "doc_id": "other",
+                "chunk_id": "irrelevant_far_chunk",
+                "source": "other.pdf",
+                "section": "Other",
+                "page": 1
+            }
+        ]],
+        "distances": [[0.32, 0.92]],
+    }
+    mock_model = MagicMock()
+    mock_model.encode.return_value.tolist.return_value = [0.1, 0.2, 0.3]
+
+    monkeypatch.setattr(chroma, "_available", True)
+    monkeypatch.setattr(chroma, "collection", mock_collection)
+    monkeypatch.setattr(chroma, "model", mock_model)
+
+    with patch(f"{groq_module}.call_for_json", return_value=groq_payload) as mock_groq:
+        resp = client.post(endpoint, json={payload_key: f"Real ChromaClient contract check for {endpoint}"})
+
+    assert resp.status_code == 200
+    body = resp.json
+    assert body["grounded"] is True
+    # Distance threshold (0.7) filters out distance 0.92 and keeps 0.32
+    assert len(body["citations"]) == 1
+    assert body["citations"][0]["chunk_id"] == "dpdp_act_2023_p8_c4"
+    assert body["citations"][0]["page"] == 8
+    assert body.get("disclaimer")
+    sent_prompt = mock_groq.call_args[0][0][-1]["content"]
+    assert "Verifiable parental consent before processing data of a child." in sent_prompt

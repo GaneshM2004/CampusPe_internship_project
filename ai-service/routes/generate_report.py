@@ -49,7 +49,7 @@ def generate_report():
     prompt_ver = _get_prompt_version()
     rag_settings = {
         "top_k": int(os.environ.get("CHROMA_TOP_K", "3")),
-        "max_dist": os.environ.get("CHROMA_MAX_DISTANCE", "none"),
+        "max_dist": os.environ.get("CHROMA_MAX_DISTANCE", "0.7"),
         "req_ground": os.environ.get("REQUIRE_GROUNDING", "false").lower()
     }
 

@@ -9,7 +9,7 @@ A full-stack compliance assistance application built for the **Digital Personal 
 ## Architecture
 
 ```
-React (Vite, port 5173)         Spring Boot 3.2.4 (Java 17, port 8080)       Flask AI Microservice (Python 3.13, port 5000)
+React (Vite, port 5173)         Spring Boot 3.2.4 (Java 17, port 8080)       Flask AI Microservice (Python 3.10, port 5000)
        │                                         │                                           │
        │── POST /api/auth/login ───────────────► │ (JWT issuance & auth)                     │
        │── POST /api/records ──────────────────► │── POST /describe ────────────────────────►│── Pydantic v2 validation
@@ -167,7 +167,7 @@ Copy `.env.example` to `.env` and fill in real values before starting services:
 | `CACHE_TTL_SECONDS` | `3600` | Redis cache TTL in seconds |
 | `CHROMA_DATA_DIR` | `<ai-service>/chroma_data` | ChromaDB persistent storage directory |
 | `CHROMA_TOP_K` | `3` | Number of context chunks retrieved per query |
-| `CHROMA_MAX_DISTANCE` | *(disabled)* | Cosine distance threshold for filtering irrelevant chunks |
+| `CHROMA_MAX_DISTANCE` | `0.7` | Cosine distance threshold for filtering irrelevant chunks |
 | `REQUIRE_GROUNDING` | `false` | If `true`, returns 422 error if no context is retrieved |
 
 Generate a secure JWT secret:
@@ -269,13 +269,13 @@ Test suite covers:
 - Redis cache hit, miss, and outage graceful degradation.
 - Empty collection handling and ChromaDB unavailable fallback.
 
-### Spring Boot Backend (Java 17 — 7 tests)
+### Spring Boot Backend (Java 17 — 12 tests)
 
 ```powershell
 mvn -f dpdp/pom.xml test
 ```
 
-**Result:** `7 passed` (`DpdpApplicationTests`: 1, `ComplianceServiceTest`: 6).
+**Result:** `12 passed` (`DpdpApplicationTests`: 1, `ComplianceServiceTest`: 6, `AsyncEnricherTest`: 2, `ComplianceControllerTest`: 3).
 
 ### Frontend Production Build
 
@@ -354,7 +354,7 @@ dpdp_Gravity/
 │   │   ├── cache_service.py       # 5-factor Redis key computation & fallback
 │   │   └── groq_client.py         # Groq API client
 │   └── tests/
-│       └── test_app.py            # 40 automated tests (mocks all external services)
+│       └── test_app.py            # Automated tests (mocks Groq/Redis/embedding boundaries)
 ├── dpdp/                          # Spring Boot 3.2.4 Backend (Java 17)
 │   ├── pom.xml                    # Maven dependencies (Java 17, Spring Boot 3.2.4)
 │   ├── Dockerfile                 # eclipse-temurin:17-jdk-alpine
