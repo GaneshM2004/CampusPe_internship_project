@@ -28,7 +28,7 @@ services:
     environment:
       POSTGRES_DB: dpdp_db
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: ${DB_PASSWORD:-change_me}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD must be set}
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -92,15 +92,15 @@ services:
       # Database — connects to Compose postgres service (not localhost)
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/dpdp_db
       SPRING_DATASOURCE_USERNAME: postgres
-      SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD:-change_me}
+      SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD must be set}
       SPRING_DATASOURCE_DRIVER_CLASS_NAME: org.postgresql.Driver
       SPRING_JPA_DATABASE_PLATFORM: org.hibernate.dialect.PostgreSQLDialect
       # AI service — connects to Compose ai-service (not localhost)
       AI_SERVICE_URL: http://ai-service:5000
-      # JWT secret — read from .env, falls back to dev placeholder if unset
-      JWT_SECRET: ${JWT_SECRET:-dGhpcy1pcy1hLXZlcnktc2VjdXJlLWp3dC1zZWNyZXQta2V5LWZvci1kcGRwLWFwcGxpY2F0aW9u}
+      # JWT secret — required from .env (no weak fallback)
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set}
     healthcheck:
-      test: ["CMD-SHELL", "nc -z localhost 8080 || exit 1"]
+      test: ["CMD-SHELL", "curl -s -o /dev/null http://localhost:8080/ || exit 1"]
       interval: 15s
       timeout: 10s
       retries: 5

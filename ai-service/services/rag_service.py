@@ -17,7 +17,7 @@ DEFAULT_TOP_K = int(os.environ.get("CHROMA_TOP_K", "3"))
 DEFAULT_MAX_DISTANCE = (
     float(os.environ.get("CHROMA_MAX_DISTANCE"))
     if os.environ.get("CHROMA_MAX_DISTANCE")
-    else None
+    else 0.7  # cosine distance: 0=identical, 2=opposite; 0.7 filters clearly irrelevant neighbors
 )
 REQUIRE_GROUNDING = os.environ.get("REQUIRE_GROUNDING", "false").lower() in ("true", "1", "yes")
 

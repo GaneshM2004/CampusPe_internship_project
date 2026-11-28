@@ -502,3 +502,99 @@ def test_citation_page_number_propagation(client):
     dumped = citation.model_dump()
     assert dumped["page"] == 5
     assert dumped["chunk_id"] == "dpdp_act_2023_p5_c1"
+
+
+# ─── 10. End-to-End Route RAG Integration & Distance Threshold Tests ─────────
+
+def test_rag_distance_threshold_filtering():
+    """retrieve_rag_context filters out chunks beyond max_distance and returns ungrounded when none pass."""
+    from services.rag_service import retrieve_rag_context
+    from services.chroma_client import ChromaClient
+
+    c = ChromaClient.__new__(ChromaClient)
+    c._available = True
+    c.collection = MagicMock()
+    c.collection.count.return_value = 10
+    c.model = MagicMock()
+    c.model.encode.return_value.tolist.return_value = [0.1, 0.2]
+
+    # Simulate a distant/irrelevant nearest neighbor (cosine distance 0.85 > 0.70)
+    c.collection.query.return_value = {
+        "ids": [["irrelevant_chunk_1"]],
+        "documents": [["Unrelated sourdough recipe text."]],
+        "metadatas": [[{"source": "doc.pdf", "doc_id": "doc1", "section": "Sec 1", "page": 1}]],
+        "distances": [[0.85]],
+    }
+
+    grounded, ctx, citations, disclaimer = retrieve_rag_context(c, "sourdough bread", top_k=3, max_distance=0.7)
+    assert grounded is False
+    assert ctx == ""
+    assert citations == []
+    assert "ungrounded" in disclaimer.lower()
+
+
+@pytest.mark.parametrize("endpoint,groq_payload,expected_field", [
+    ("/describe", {"professional_description": "Grounded desc."}, "professional_description"),
+    ("/recommend", {"recommendations": [{"action_type": "Legal", "description": "Get consent.", "priority": "High"}]}, "recommendations"),
+    ("/generate-report", {
+        "title": "Audit",
+        "executive_summary": "Summary",
+        "overview": "Overview",
+        "top_items": ["Item 1"],
+        "recommendations": ["Rec 1"]
+    }, "title"),
+])
+def test_live_routes_invoke_chroma_and_inject_context(client, monkeypatch, endpoint, groq_payload, expected_field):
+    """
+    Verify /describe, /recommend, and /generate-report each invoke Chroma retrieval
+    (without mocking retrieve_rag_context), inject retrieved context into the Groq prompt,
+    and attach citations from retrieved metadata.
+    """
+    from app import get_chroma
+    chroma_client = get_chroma()
+
+    fake_chunk = [{
+        "id": "dpdp_act_2023_p8_c4",
+        "document": "Section 9: Verifiable parental consent is required for children under 18.",
+        "metadata": {
+            "doc_id": "dpdp_act_2023",
+            "chunk_id": "dpdp_act_2023_p8_c4",
+            "source": "DPDP_ACT_2023.pdf",
+            "section": "Section 9",
+            "page": 8,
+            "file_sha256": "abc123",
+            "text_hash": "def456"
+        },
+        "distance": 0.30
+    }]
+
+    monkeypatch.setattr(chroma_client, "_available", True)
+    query_mock = MagicMock(return_value=fake_chunk)
+    monkeypatch.setattr(chroma_client, "query", query_mock)
+    monkeypatch.setattr(chroma_client, "get_corpus_version", lambda: "v_test_c1")
+
+    groq_module = {
+        "/describe": "routes.describe._groq",
+        "/recommend": "routes.recommend._groq",
+        "/generate-report": "routes.generate_report._groq",
+    }[endpoint]
+
+    with patch(f"{groq_module}.call_for_json", return_value=groq_payload) as mock_groq_call:
+        resp = client.post(endpoint, json={"input_text": f"Children consent check for {endpoint}"})
+
+    assert resp.status_code == 200
+    body = resp.json
+    assert expected_field in body
+    assert body["grounded"] is True
+    assert len(body["citations"]) == 1
+    assert body["citations"][0]["chunk_id"] == "dpdp_act_2023_p8_c4"
+    assert body["citations"][0]["page"] == 8
+
+    # Prove Chroma query was actually invoked by the route
+    assert query_mock.call_count == 1
+
+    # Prove retrieved context was actually injected into the prompt sent to Groq
+    sent_messages = mock_groq_call.call_args[0][0]
+    prompt_sent = sent_messages[0]["content"]
+    assert "Verifiable parental consent is required for children under 18." in prompt_sent
+    assert "dpdp_act_2023_p8_c4" in prompt_sent

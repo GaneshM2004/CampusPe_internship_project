@@ -1,6 +1,9 @@
 # Use official Java 17 image (change to 21 if you used Java 21)
 FROM eclipse-temurin:17-jdk-alpine
 
+# Install curl for container healthcheck
+RUN apk add --no-cache curl
+
 # Set working directory
 WORKDIR /app
 

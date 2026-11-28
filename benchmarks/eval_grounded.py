@@ -38,31 +38,36 @@ REVIEWED_TEST_SET = [
         "id": "TC-001",
         "category": "Children Data Protection",
         "query": "Processing personal data of children under 18 years and obtaining parental consent.",
-        "expected_topic": "children"
+        "expected_topic": "children",
+        "expected_grounded": True
     },
     {
         "id": "TC-002",
         "category": "Data Breach Notification",
         "query": "Intimating the Data Protection Board of India and affected data principals upon personal data breach.",
-        "expected_topic": "breach"
+        "expected_topic": "breach",
+        "expected_grounded": True
     },
     {
         "id": "TC-003",
         "category": "Behavioral Monitoring",
         "query": "Behavioral monitoring and targeted advertising directed at children.",
-        "expected_topic": "children"
+        "expected_topic": "children",
+        "expected_grounded": True
     },
     {
         "id": "TC-004",
         "category": "Penalties",
         "query": "Penalties for failure to prevent personal data breach up to 250 crore rupees.",
-        "expected_topic": "penalty"
+        "expected_topic": "penalty",
+        "expected_grounded": True
     },
     {
         "id": "TC-005",
-        "category": "Cross-Border Transfer (Out of Corpus)",
-        "query": "Transfer of personal data outside India to blacklisted countries or territories.",
-        "expected_topic": "cross_border"
+        "category": "Unrelated Domain (Out of Corpus)",
+        "query": "Baking recipes and oven temperature controls for artisanal sourdough bread production.",
+        "expected_topic": "out_of_corpus",
+        "expected_grounded": False
     }
 ]
 
@@ -120,11 +125,17 @@ def run_grounding_evaluation():
             else:
                 test_citations_valid = False
 
+        expected_grounded = tc.get("expected_grounded", True)
+        expectation_met = (grounded == expected_grounded)
+
         if grounded:
             retrieval_successes += 1
-            status = "GROUNDED (verified)" if test_citations_valid else "INVALID_CITATION"
+            status = "GROUNDED (candidate)" if test_citations_valid else "INVALID_CITATION"
         else:
-            status = "UNGROUNDED (honest fallback)"
+            status = "UNGROUNDED (expected fallback)" if not expected_grounded else "UNGROUNDED (miss)"
+
+        if not expectation_met:
+            status += " [MISMATCH]"
 
         print(f"{tc['id']:<8} | {tc['category'][:26]:<28} | {str(grounded):<10} | {len(citations):<10} | {status}")
 
@@ -132,7 +143,9 @@ def run_grounding_evaluation():
             "test_id": tc["id"],
             "category": tc["category"],
             "query": tc["query"],
+            "expected_grounded": expected_grounded,
             "grounded": grounded,
+            "expectation_met": expectation_met,
             "citations_returned": citations,
             "citations_count": len(citations),
             "citations_verified": test_citations_valid

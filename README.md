@@ -23,7 +23,7 @@ React (Vite, port 5173)         Spring Boot 3.2.4 (Java 17, port 8080)       Fla
                                                  │
                                         PostgreSQL 16 (compliance records)
                                         Redis 7 (5-factor cached AI results)
-                                        ChromaDB (embedded 232-chunk vector store)
+                                        ChromaDB (embedded vector store; populated via ingestion)
 ```
 
 ### Services Overview
@@ -77,7 +77,7 @@ React (Vite, port 5173)         Spring Boot 3.2.4 (Java 17, port 8080)       Fla
 4. **AI Microservice Pipeline**:
    - **Pydantic Validation**: Validates payload structure (non-empty, non-whitespace, $\le 5000$ chars).
    - **Redis Cache Check**: Generates a 5-factor key (`endpoint + normalized_input + prompt_hash + model_id + manifest_hash + rag_settings`). Returns cached response immediately on hit.
-   - **ChromaDB Vector Retrieval**: Embeds text using `all-MiniLM-L6-v2` and queries the 232-chunk vector store with cosine distance ranking.
+   - **ChromaDB Vector Retrieval**: Embeds text using `all-MiniLM-L6-v2` and queries the local ChromaDB vector store with cosine distance ranking and a configurable relevance threshold (`CHROMA_MAX_DISTANCE`, default `0.7`).
    - **Prompt Injection**: Injects authoritative legal context passages and section markers into prompt templates.
    - **Groq LLM Execution**: Calls `llama-3.3-70b-versatile` with low temperature ($0.1$ to $0.3$).
    - **Response Validation**: Enforces Pydantic response models and attaches verified chunk citations with page numbers.
@@ -88,16 +88,18 @@ React (Vite, port 5173)         Spring Boot 3.2.4 (Java 17, port 8080)       Fla
 
 ## Knowledge Base & Document Ingestion
 
-The active ChromaDB knowledge base contains **232 chunks** extracted from the two Gazette PDF publications located in `ai-service/documents/`:
+> **Fresh Clone Notice:** `ai-service/chroma_data/` is gitignored and **not bundled** in the repository. A fresh clone has an empty vector store. You **must** run document ingestion before grounded RAG retrieval will return citations.
+
+When ingested locally from the two Gazette PDF publications located in `ai-service/documents/` (currently tracked in Git; verify redistribution/licensing before publishing):
 
 1. **`DPDP_ACT_2023.pdf`** (The Digital Personal Data Protection Act, 2023 — Act No. 22 of 2023):
-   - 21 pages, 63,482 characters $\to$ **115 chunks**
+   - 21 pages, 63,482 characters (measured **115 chunks** in local ingestion)
    - Covers Chapters I–IX (Sections 1–44) and the Penalties Schedule.
 2. **`DPDP_Rules_2025_English_only.pdf`** (Digital Personal Data Protection Rules, 2025 — G.S.R. 846(E)):
-   - 18 pages, 63,100 characters $\to$ **117 chunks**
+   - 18 pages, 63,100 characters (measured **117 chunks** in local ingestion)
    - Covers Rules 1–23 and First/Second Schedules.
 
-Metadata and verification status are recorded in [`ai-service/documents/corpus_manifest.json`](file:///e:/dpdp_Gravity/ai-service/documents/corpus_manifest.json).
+Metadata and verification status are recorded in [`ai-service/documents/corpus_manifest.json`](ai-service/documents/corpus_manifest.json).
 
 > **Provenance Notice:** Ingestion does not prove legal authenticity. Local PDFs are registered with `source_authority_status: "unverified_local_file"` until official publication URLs (such as `egazette.gov.in`) are independently confirmed.
 
@@ -307,13 +309,12 @@ python benchmarks/benchmark_cache.py --samples 25
 python benchmarks/eval_grounded.py
 ```
 
-- **Methodology**: Evaluates 5 reviewed compliance scenarios against the 232 active legal chunks in ChromaDB.
-- **Measured Result**:
-  - Active Chunks in ChromaDB: **232 chunks**
-  - Retrieval Coverage: **100%** (5/5 queries retrieved relevant candidate passages)
-  - Citation Verification: **15/15 citations verified** against active chunk IDs in ChromaDB
+- **Methodology**: Evaluates 5 reviewed compliance scenarios (4 in-corpus DPDP queries + 1 out-of-corpus negative control) against a locally ingested ChromaDB collection using a `0.7` cosine distance threshold (`CHROMA_MAX_DISTANCE`).
+- **Measured Result (local 232-chunk collection)**:
+  - Retrieval Coverage: **80.0%** (4/5 queries retrieved candidate passages; TC-005 out-of-corpus returned ungrounded fallback as expected)
+  - Citation Verification: **12/12 citations verified** against active chunk IDs in ChromaDB
   - Invalid Citation Rate: **0.0%**
-- **Notice**: "Retrieval coverage" measures vector matching against the local corpus. It does **not** guarantee legal accuracy or correctness of the generated advice.
+- **Notice**: "Retrieval coverage" measures candidate vector matching against the local corpus. Citation-ID verification confirms chunk metadata provenance, **not** legal accuracy or correctness of generated advice.
 
 ### 3. Application Cold Start Measurement
 
@@ -339,7 +340,7 @@ dpdp_Gravity/
 │   │   ├── DPDP_ACT_2023.pdf      # 2023 Act Gazette publication (21 pages, 115 chunks)
 │   │   ├── DPDP_Rules_2025_English_only.pdf # 2025 Rules Gazette notification (18 pages, 117 chunks)
 │   │   └── README.md              # Document ingestion and provenance guide
-│   ├── chroma_data/               # Persistent ChromaDB vector storage (232 chunks)
+│   ├── chroma_data/               # Local persistent ChromaDB vector storage (gitignored; run ingest_documents.py)
 │   ├── prompts/                   # Prompt templates ({user_input} + {context_block})
 │   ├── routes/
 │   │   ├── describe.py            # RAG + Pydantic + Redis caching

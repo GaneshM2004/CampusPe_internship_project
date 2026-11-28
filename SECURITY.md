@@ -38,9 +38,9 @@ Authorization is strictly enforced in `ComplianceController.java` rather than re
 1. **Self-Invocation Proxy Protection:**
    - Asynchronous enrichment is isolated inside `AsyncEnricher.java` (a dedicated Spring bean), preventing self-invocation proxy bypass and ensuring thread-pool execution.
 2. **Deterministic State Progression:**
-   - Record submission immediately creates a record with `status: "PENDING"`.
-   - On successful AI enrichment, the state transitions to `"COMPLETED"`.
-   - On upstream AI timeout or failure, the record safely transitions to `"FAILED"`, preventing UI polling deadlocks.
+   - Record submission in `ComplianceService.java` immediately saves the record with `status: "PROCESSING"` and triggers `AsyncEnricher.enrichRecordWithAi(...)`.
+   - On successful AI enrichment, `AsyncEnricher` sets `professionalDescription` (or a manual-review fallback string if Groq returns `null`) and transitions `status` to `"COMPLETED"`.
+   - On an unhandled exception during enrichment, `AsyncEnricher` catches the error and transitions `status` to `"FAILED"`, preventing UI polling deadlocks.
 3. **Safe Error Handling:**
    - Pydantic validation failures return structured error messages without exposing internal stack traces, system paths, or model credentials.
    - Redis caching suppresses and never persists error payloads or provider outages.
