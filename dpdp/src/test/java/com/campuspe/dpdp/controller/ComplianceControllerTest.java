@@ -69,6 +69,23 @@ class ComplianceControllerTest {
     }
 
     @Test
+    void getRecordReport_NonOwnerUser_ReturnsForbidden() {
+        User owner = new User("owner", "hash", Role.USER);
+        owner.setId(10L);
+        ComplianceRecord record = new ComplianceRecord();
+        record.setId(2L);
+        record.setUser(owner);
+
+        when(complianceService.getRecordById(2L)).thenReturn(record);
+
+        Authentication otherUser = authFor(99L, "ROLE_USER");
+        ResponseEntity<?> response = controller.getRecordReport(2L, otherUser);
+
+        assertEquals(HttpStatus.FORBIDDEN, response.getStatusCode());
+        verifyNoInteractions(aiServiceClient);
+    }
+
+    @Test
     void exportToCSV_NonAdminUser_ReturnsForbidden() {
         Authentication regularUser = authFor(10L, "ROLE_USER");
         ResponseEntity<?> response = controller.exportToCSV(regularUser);

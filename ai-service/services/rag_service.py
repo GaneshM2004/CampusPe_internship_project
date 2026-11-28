@@ -3,7 +3,7 @@
 # Retrieval-Augmented Generation (RAG) orchestration:
 # - Queries ChromaDB vector store
 # - Applies configurable top_k and distance threshold
-# - Extracts verified citations from retrieved metadata (never hallucinated)
+# - Extracts citations from retrieved chunk metadata (from local files; provenance unverified)
 # - Produces prompt context blocks and grounding disclaimers
 # =============================================================================
 
@@ -22,13 +22,13 @@ DEFAULT_MAX_DISTANCE = (
 REQUIRE_GROUNDING = os.environ.get("REQUIRE_GROUNDING", "false").lower() in ("true", "1", "yes")
 
 UNGROUNDED_DISCLAIMER = (
-    "Informational assistance only. No matching authoritative DPDP Act source documents were "
-    "retrieved from the knowledge base; this response is ungrounded and must not be treated as legal advice."
+    "Informational assistance only. No relevant source passages were retrieved from the local "
+    "knowledge base; this response is not grounded in retrieved text and must not be treated as legal advice."
 )
 
 GROUNDED_DISCLAIMER = (
-    "Informational assistance only. Grounded against retrieved knowledge base source chunks, "
-    "but AI output cannot guarantee regulatory compliance or legal accuracy."
+    "Informational assistance only. Retrieved from locally stored, unverified source files. "
+    "AI output does not guarantee regulatory compliance, legal accuracy, or official interpretation."
 )
 
 
@@ -90,10 +90,11 @@ def retrieve_rag_context(
         )
 
     context_block = (
-        "\n\n[AUTHORITATIVE DPDP ACT KNOWLEDGE BASE CONTEXT]:\n"
+        "\n\n[RETRIEVED SOURCE CONTEXT — unverified local files; not guaranteed authoritative]:\n"
         + "\n\n---\n\n".join(formatted_chunks)
         + "\n[END CONTEXT]\n"
-        + "INSTRUCTION: Ground your analysis strictly in the context above where relevant.\n"
+        + "INSTRUCTION: Where relevant, base your analysis on the retrieved source passages above. "
+        "Do not treat retrieved text as legally authoritative. Cite the chunk ID and page number.\n"
     )
 
     return True, context_block, citations, GROUNDED_DISCLAIMER

@@ -32,7 +32,7 @@ React (Vite, port 5173)         Spring Boot 3.2.4 (Java 17, port 8080)       Fla
 |---------|-----------|------|---------------------------|
 | **Frontend** | React 18 + Vite | 5173 (dev) | **No** (runs separately on host via `npm run dev`) |
 | **Backend** | Spring Boot 3.2.4 / Java 17 | 8080 | **Yes** (`backend` service) |
-| **AI Microservice** | Python 3.13 / Flask | 5000 | **Yes** (`ai-service` service) |
+| **AI Microservice** | Python 3.10 / Flask | 5000 | **Yes** (`ai-service` service) |
 | **Database** | PostgreSQL 16 | 5432 | **Yes** (`postgres` service) |
 | **Cache** | Redis 7 | 6379 | **Yes** (`redis` service) |
 | **Vector Store** | ChromaDB (embedded) | — | **Yes** (persisted under `chromadata` volume) |
@@ -72,13 +72,13 @@ React (Vite, port 5173)         Spring Boot 3.2.4 (Java 17, port 8080)       Fla
 1. **User Authentication**: Client submits credentials to `POST /api/auth/login`. Spring Boot verifies credentials and issues a signed JWT containing user identity and roles (`ROLE_USER` or `ROLE_ADMIN`).
 2. **Submission**: Client submits compliance text to `POST /api/records` with `Authorization: Bearer <token>`.
 3. **Persistence & Asynchronous Hand-off**:
-   - `ComplianceController` validates the JWT and creates a `ComplianceRecord` in PostgreSQL with status `PENDING`.
+   - `ComplianceController` validates the JWT and creates a `ComplianceRecord` in PostgreSQL with status `PROCESSING`.
    - `AsyncEnricher` (a dedicated Spring `@Component` that ensures CGLIB proxy interception) executes in a background thread pool, calling `POST http://ai-service:5000/describe`.
 4. **AI Microservice Pipeline**:
    - **Pydantic Validation**: Validates payload structure (non-empty, non-whitespace, $\le 5000$ chars).
    - **Redis Cache Check**: Generates a 5-factor key (`endpoint + normalized_input + prompt_hash + model_id + manifest_hash + rag_settings`). Returns cached response immediately on hit.
    - **ChromaDB Vector Retrieval**: Embeds text using `all-MiniLM-L6-v2` and queries the local ChromaDB vector store with cosine distance ranking and a configurable relevance threshold (`CHROMA_MAX_DISTANCE`, default `0.7`).
-   - **Prompt Injection**: Injects authoritative legal context passages and section markers into prompt templates.
+   - **Prompt Injection**: Injects retrieved source context passages and chunk IDs into prompt templates (retrieved from locally stored, unverified files; not guaranteed legally authoritative).
    - **Groq LLM Execution**: Calls `llama-3.3-70b-versatile` with low temperature ($0.1$ to $0.3$).
    - **Response Validation**: Enforces Pydantic response models and attaches verified chunk citations with page numbers.
    - **Cache Write**: Stores the validated response in Redis with TTL ($3600$s).
@@ -182,7 +182,7 @@ python -c "import base64, os; print(base64.b64encode(os.urandom(32)).decode())"
 ### Prerequisites
 
 - **Java 17**, Maven 3.9+
-- **Python 3.13** (with `pip`)
+- **Python 3.10** (matches `ai-service/Dockerfile`; local dev may use a newer version that also works)
 - **Node.js 20+**, npm
 - **PostgreSQL 16** (or use Docker Compose for the database)
 - **Redis 7** (or use Docker Compose for the cache)
@@ -249,14 +249,15 @@ docker-compose up --build
 
 ## Automated Test Execution
 
-### AI Microservice (Python — 40 tests)
+### AI Microservice (Python)
 
 ```powershell
-$env:PYTHONPATH="e:\dpdp_Gravity\ai-service"
-python -m pytest e:\dpdp_Gravity\ai-service\tests -v
+# Run from the repository root (PowerShell):
+$env:PYTHONPATH = "$PWD\ai-service"
+python -m pytest ai-service\tests -v
 ```
 
-**Result:** `40 passed` (all external dependencies mocked; requires no live API keys or network access).
+**Note:** The test count is reported by pytest at runtime. Run the command on your local clone; do not rely on a hardcoded number in this document.
 
 Test suite covers:
 - RAG retrieval, context injection, and page-aware citation validation.

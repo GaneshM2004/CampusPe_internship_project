@@ -117,6 +117,7 @@ class CategoriseResponse(BaseModel):
     meta: CategoriseMeta
     grounded: bool = False
     citations: List[CitationItem] = []
+    disclaimer: Optional[str] = None
 
 
 # ── POST /recommend ──────────────────────────────────────────────────────────

@@ -20,6 +20,11 @@ client = GroqClient()
 MODEL_ID = "llama-3.3-70b-versatile"
 PROMPT_VERSION = "cat_v1"
 
+INFORMATIONAL_DISCLAIMER = (
+    "Informational assistance only. This classification is AI-generated and does not "
+    "constitute legal advice, regulatory guidance, or a determination of compliance."
+)
+
 FALLBACK_RESPONSE = {
     "category": "Data Processing",
     "confidence": 0.0,
@@ -32,7 +37,8 @@ FALLBACK_RESPONSE = {
         "is_fallback": True,
     },
     "grounded": False,
-    "citations": []
+    "citations": [],
+    "disclaimer": INFORMATIONAL_DISCLAIMER
 }
 
 
@@ -73,7 +79,8 @@ def categorise():
         return jsonify({
             "error": "Insufficient source context in knowledge base to categorise compliance item",
             "grounded": False,
-            "citations": []
+            "citations": [],
+            "disclaimer": INFORMATIONAL_DISCLAIMER
         }), 422
 
     categories_str = " | ".join(DPDP_CATEGORIES)
@@ -135,7 +142,8 @@ def categorise():
             is_fallback=False
         ),
         grounded=grounded,
-        citations=citations
+        citations=citations,
+        disclaimer=INFORMATIONAL_DISCLAIMER
     )
 
     result_dict = response_model.model_dump()

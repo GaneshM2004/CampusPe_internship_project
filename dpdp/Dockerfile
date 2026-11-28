@@ -1,4 +1,4 @@
-# Use official Java 17 image (change to 21 if you used Java 21)
+# Use official Java 17 image
 FROM eclipse-temurin:17-jdk-alpine
 
 # Install curl for container healthcheck

@@ -1,4 +1,7 @@
-# Use an official Python runtime as a parent image
+# Python runtime for the AI microservice.
+# ai-service/Dockerfile uses python:3.10-slim; local development may run a newer Python
+# (3.11, 3.12, 3.13) — requirements.txt is compatible with both.
+# The container image is pinned to 3.10 for reproducibility.
 FROM python:3.10-slim
 
 # Set the working directory in the container

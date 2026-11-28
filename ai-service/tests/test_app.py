@@ -530,7 +530,7 @@ def test_rag_distance_threshold_filtering():
     assert grounded is False
     assert ctx == ""
     assert citations == []
-    assert "ungrounded" in disclaimer.lower()
+    assert "not grounded" in disclaimer.lower() or "ungrounded" in disclaimer.lower()
 
 
 @pytest.mark.parametrize("endpoint,groq_payload,expected_field", [
